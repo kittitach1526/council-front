@@ -1,0 +1,292 @@
+"use server";
+
+const API_BASE_URL = process.env.API_BASE_URL || "http://127.0.0.1:5000";
+
+const ROOT_USERNAME = "root";
+const ROOT_PASSWORD = "p@ssw0rd";
+
+interface WelfareRequest {
+  id: number;
+  gangName?: string;
+  gangAbbreviation?: string;
+  requestName: string;
+  discordId: string;
+  welfareItem: string;
+  status: string;
+  createdAt: string;
+}
+
+type ApiPayload = Record<string, string | number | boolean | null | undefined>;
+
+function formDataToObject(formData: FormData): ApiPayload {
+  const obj: ApiPayload = {};
+  formData.forEach((value, key) => {
+    obj[key] = typeof value === "string" ? value : value.toString();
+  });
+  return obj;
+}
+
+function formatThaiDate(value: string | Date | null | undefined): string {
+  if (!value) return "ไม่ระบุเวลา";
+  const d = value instanceof Date ? value : new Date(value);
+  if (isNaN(d.getTime())) return String(value);
+  return d.toLocaleString("th-TH");
+}
+
+async function apiFetch(
+  method: string,
+  path: string,
+  body?: ApiPayload
+) {
+  const url = `${API_BASE_URL}${path}`;
+  const options: RequestInit = {
+    method,
+    headers: { "Content-Type": "application/json" },
+  };
+  if (body !== undefined) {
+    options.body = JSON.stringify(body);
+  }
+  try {
+    const res = await fetch(url, options);
+    const data = await res.json().catch(() => ({}));
+    return data;
+  } catch (error) {
+    console.error("API Error:", error);
+    return { success: false, message: "❌ ไม่สามารถเชื่อมต่อกับระบบหลังบ้านได้" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Disband Requests
+// ---------------------------------------------------------------------------
+export async function requestDisbandGang(abbreviation: string, reason?: string) {
+  if (!abbreviation) {
+    return { success: false, message: "❌ ไม่พบข้อมูลชื่อย่อแก๊ง" };
+  }
+  return apiFetch("POST", "/api/gangs/disband", { abbreviation, reason });
+}
+
+export async function getPendingDisbandRequests() {
+  return apiFetch("GET", "/api/disband-requests");
+}
+
+export async function getDisbandRequestByGang(gangId: number) {
+  return apiFetch("GET", `/api/gangs/${gangId}/disband-request`);
+}
+
+export async function approveDisbandRequest(id: number, reviewer: string) {
+  return apiFetch("POST", `/api/disband-requests/${id}/approve`, { reviewer });
+}
+
+export async function rejectDisbandRequest(id: number, reviewer: string) {
+  return apiFetch("POST", `/api/disband-requests/${id}/reject`, { reviewer });
+}
+
+// ---------------------------------------------------------------------------
+// Gang Registration / Login
+// ---------------------------------------------------------------------------
+export async function createRegistration(formData: FormData) {
+  const payload = formDataToObject(formData);
+  return apiFetch("POST", "/api/gangs/register", payload);
+}
+
+export async function loginGang(formData: FormData) {
+  const payload = formDataToObject(formData);
+  return apiFetch("POST", "/api/gangs/login", payload);
+}
+
+export async function getAllGangs() {
+  return apiFetch("GET", "/api/gangs");
+}
+
+export async function updateGangStatus(
+  id: number,
+  status: "approved" | "disbanded" | "pending" | "รอยุบ"
+) {
+  return apiFetch("PATCH", `/api/gangs/${id}/status`, { status });
+}
+
+// ---------------------------------------------------------------------------
+// Gang Edit Requests
+// ---------------------------------------------------------------------------
+export async function createGangEditRequest(formData: FormData) {
+  const payload = formDataToObject(formData);
+  const gangId = Number(payload.id);
+  if (!gangId) {
+    return { success: false, message: "❌ ไม่พบรหัสแก๊ง" };
+  }
+  if (payload.password) {
+    payload.newPassword = payload.password;
+    delete payload.password;
+  }
+  return apiFetch("POST", `/api/gangs/${gangId}/edit-requests`, payload);
+}
+
+export async function getPendingGangEditRequests() {
+  return apiFetch("GET", "/api/edit-requests/pending");
+}
+
+export async function getGangEditRequestByGang(gangId: number) {
+  return apiFetch("GET", `/api/gangs/${gangId}/edit-requests`);
+}
+
+export async function approveGangEditRequest(id: number, reviewer: string) {
+  return apiFetch("POST", `/api/edit-requests/${id}/approve`, { reviewer });
+}
+
+export async function rejectGangEditRequest(id: number, reviewer: string) {
+  return apiFetch("POST", `/api/edit-requests/${id}/reject`, { reviewer });
+}
+
+// ---------------------------------------------------------------------------
+// Uniform Files
+// ---------------------------------------------------------------------------
+export async function createUniformFile(formData: FormData) {
+  const payload = formDataToObject(formData);
+  return apiFetch("POST", "/api/uniform-files", payload);
+}
+
+export async function getAllUniformFiles() {
+  return apiFetch("GET", "/api/uniform-files");
+}
+
+export async function updateUniformFileLink(
+  id: number,
+  newFileUrl: string,
+  reason: string
+) {
+  return apiFetch("PATCH", `/api/uniform-files/${id}/link`, {
+    newFileUrl,
+    reason,
+  });
+}
+
+export async function updateUniformStatus(
+  id: number,
+  status: "ลงแล้ว" | "ปฏิเสธ" | "รอลง"
+) {
+  return apiFetch("PATCH", `/api/uniform-files/${id}/status`, { status });
+}
+
+// ---------------------------------------------------------------------------
+// Welfare Requests
+// ---------------------------------------------------------------------------
+export async function createWelfareRequest(formData: FormData) {
+  const payload = formDataToObject(formData);
+  return apiFetch("POST", "/api/welfare", payload);
+}
+
+export async function getWelfareRequestsByGang(gangAbbreviation: string) {
+  const result = await apiFetch(
+    "GET",
+    `/api/welfare/gang/${encodeURIComponent(gangAbbreviation)}`
+  );
+  if (result.success && Array.isArray(result.requests)) {
+    result.requests = result.requests.map((req: WelfareRequest) => ({
+      ...req,
+      createdAt: formatThaiDate(req.createdAt),
+    }));
+  }
+  return result;
+}
+
+export async function getAllWelfareRequests() {
+  const result = await apiFetch("GET", "/api/welfare");
+  if (result.success && Array.isArray(result.requests)) {
+    result.requests = result.requests.map((req: WelfareRequest) => ({
+      ...req,
+      createdAt: formatThaiDate(req.createdAt),
+    }));
+  }
+  return result;
+}
+
+export async function updateWelfareStatus(
+  id: number,
+  status: "รับไปแล้ว" | "เอาออกแล้ว" | "รอรับ"
+) {
+  return apiFetch("PATCH", `/api/welfare/${id}/status`, { status });
+}
+
+// ---------------------------------------------------------------------------
+// Council Users
+// ---------------------------------------------------------------------------
+export async function loginCouncil(formData: FormData) {
+  const payload = formDataToObject(formData);
+  return apiFetch("POST", "/api/council/login", payload);
+}
+
+export async function getAllCouncilUsers() {
+  return apiFetch("GET", "/api/council");
+}
+
+export async function createCouncilUser(formData: FormData) {
+  const payload = formDataToObject(formData);
+  return apiFetch("POST", "/api/council", payload);
+}
+
+export async function updateCouncilUserStatus(
+  id: number,
+  status: "อนุมัติ" | "ระงับใช้งาน"
+) {
+  return apiFetch("PATCH", `/api/council/${id}/status`, { status });
+}
+
+export async function deleteCouncilUser(id: number) {
+  return apiFetch("DELETE", `/api/council/${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Admin Users
+// ---------------------------------------------------------------------------
+export async function loginAdmin(formData: FormData) {
+  const payload = formDataToObject(formData);
+  return apiFetch("POST", "/api/admin/login", payload);
+}
+
+export async function getAllAdminUsers() {
+  return apiFetch("GET", "/api/admin");
+}
+
+export async function createAdminUser(formData: FormData) {
+  const payload = formDataToObject(formData);
+  return apiFetch("POST", "/api/admin", payload);
+}
+
+export async function updateAdminUserStatus(
+  id: number,
+  status: "อนุมัติ" | "ระงับใช้งาน"
+) {
+  return apiFetch("PATCH", `/api/admin/${id}/status`, { status });
+}
+
+export async function deleteAdminUser(id: number) {
+  return apiFetch("DELETE", `/api/admin/${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Root Login (ไม่ผ่าน API - เก็บไว้ใน frontend/server action)
+// ---------------------------------------------------------------------------
+export async function loginRoot(formData: FormData) {
+  const username = formData.get("username");
+  const password = formData.get("password");
+
+  if (
+    typeof username !== "string" ||
+    typeof password !== "string" ||
+    !username.trim() ||
+    !password.trim()
+  ) {
+    return { success: false, message: "❌ กรุณากรอกข้อมูลให้ครบถ้วน" };
+  }
+
+  if (username.trim() !== ROOT_USERNAME || password !== ROOT_PASSWORD) {
+    return { success: false, message: "❌ ชื่อผู้ใช้หรือรหัสผ่านผู้ดูแลสูงสุดไม่ถูกต้อง" };
+  }
+
+  return {
+    success: true,
+    message: "🎉 เข้าสู่ระบบผู้ดูแลสูงสุดสำเร็จ!",
+    root: { username: ROOT_USERNAME },
+  };
+}
