@@ -1,6 +1,6 @@
 "use server";
 
-const API_BASE_URL = process.env.API_BASE_URL || "https://partner369.pythonanywhere.com";
+const API_BASE_URL = process.env.API_BASE_URL || "http://127.0.0.1:4000";
 
 const ROOT_USERNAME = "root";
 const ROOT_PASSWORD = "p@ssw0rd";
@@ -14,9 +14,10 @@ interface WelfareRequest {
   welfareItem: string;
   status: string;
   createdAt: string;
+  approver?: string;
 }
 
-type ApiPayload = Record<string, string | number | boolean | null | undefined>;
+type ApiPayload = Record<string, unknown>;
 
 function formDataToObject(formData: FormData): ApiPayload {
   const obj: ApiPayload = {};
@@ -59,11 +60,11 @@ async function apiFetch(
 // ---------------------------------------------------------------------------
 // Disband Requests
 // ---------------------------------------------------------------------------
-export async function requestDisbandGang(abbreviation: string, reason?: string) {
+export async function requestDisbandGang(abbreviation: string, reason?: string, approver?: string) {
   if (!abbreviation) {
     return { success: false, message: "❌ ไม่พบข้อมูลชื่อย่อแก๊ง" };
   }
-  return apiFetch("POST", "/api/gangs/disband", { abbreviation, reason });
+  return apiFetch("POST", "/api/gangs/disband", { abbreviation, reason, approver });
 }
 
 export async function getPendingDisbandRequests() {
@@ -80,6 +81,41 @@ export async function approveDisbandRequest(id: number, reviewer: string) {
 
 export async function rejectDisbandRequest(id: number, reviewer: string) {
   return apiFetch("POST", `/api/disband-requests/${id}/reject`, { reviewer });
+}
+
+// ---------------------------------------------------------------------------
+// Pause Requests
+// ---------------------------------------------------------------------------
+export async function requestPauseGang(
+  abbreviation: string,
+  reason: string,
+  approver: string,
+  durationDays: number
+) {
+  if (!abbreviation) {
+    return { success: false, message: "❌ ไม่พบข้อมูลชื่อย่อแก๊ง" };
+  }
+  return apiFetch("POST", "/api/gangs/pause", { abbreviation, reason, approver, durationDays });
+}
+
+export async function getPauseRequestByGang(gangId: number) {
+  return apiFetch("GET", `/api/gangs/${gangId}/pause-request`);
+}
+
+export async function getPauseRequests() {
+  return apiFetch("GET", "/api/pause-requests");
+}
+
+export async function approvePauseRequest(id: number, reviewer: string) {
+  return apiFetch("POST", `/api/pause-requests/${id}/approve`, { reviewer });
+}
+
+export async function rejectPauseRequest(id: number, reviewer: string) {
+  return apiFetch("POST", `/api/pause-requests/${id}/reject`, { reviewer });
+}
+
+export async function reportPauseRequest(id: number) {
+  return apiFetch("POST", `/api/pause-requests/${id}/report`);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +137,7 @@ export async function getAllGangs() {
 
 export async function updateGangStatus(
   id: number,
-  status: "approved" | "disbanded" | "pending" | "รอยุบ"
+  status: "approved" | "disbanded" | "pending" | "รอยุบ" | "พัก"
 ) {
   return apiFetch("PATCH", `/api/gangs/${id}/status`, { status });
 }
@@ -139,10 +175,17 @@ export async function rejectGangEditRequest(id: number, reviewer: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Council Names (used for dropdowns like uniform approver)
+// ---------------------------------------------------------------------------
+export async function getCouncilNames() {
+  return apiFetch("GET", "/api/council/names");
+}
+
+// ---------------------------------------------------------------------------
 // Uniform Files
 // ---------------------------------------------------------------------------
-export async function createUniformFile(formData: FormData) {
-  const payload = formDataToObject(formData);
+export async function createUniformFile(data: FormData | Record<string, unknown>) {
+  const payload = data instanceof FormData ? formDataToObject(data) : (data as ApiPayload);
   return apiFetch("POST", "/api/uniform-files", payload);
 }
 
@@ -171,8 +214,8 @@ export async function updateUniformStatus(
 // ---------------------------------------------------------------------------
 // Welfare Requests
 // ---------------------------------------------------------------------------
-export async function createWelfareRequest(formData: FormData) {
-  const payload = formDataToObject(formData);
+export async function createWelfareRequest(data: FormData | Record<string, unknown>) {
+  const payload = data instanceof FormData ? formDataToObject(data) : (data as ApiPayload);
   return apiFetch("POST", "/api/welfare", payload);
 }
 
@@ -203,9 +246,57 @@ export async function getAllWelfareRequests() {
 
 export async function updateWelfareStatus(
   id: number,
-  status: "รับไปแล้ว" | "เอาออกแล้ว" | "รอรับ"
+  status: "รับไปแล้ว" | "เอาออกแล้ว" | "เอาสวัสดิการออกแล้ว" | "รอรับ"
 ) {
   return apiFetch("PATCH", `/api/welfare/${id}/status`, { status });
+}
+
+export async function getWelfareItems() {
+  return apiFetch("GET", "/api/welfare-items");
+}
+
+export async function createWelfareItem(name: string, type: string) {
+  return apiFetch("POST", "/api/welfare-items", { name, type });
+}
+
+export async function updateWelfareItem(
+  id: number,
+  payload: { name?: string; type?: string; active?: boolean }
+) {
+  return apiFetch("PATCH", `/api/welfare-items/${id}`, payload);
+}
+
+export async function deleteWelfareItem(id: number) {
+  return apiFetch("DELETE", `/api/welfare-items/${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Welfare Season Management
+// ---------------------------------------------------------------------------
+export async function getWelfareSeasons() {
+  return apiFetch("GET", "/api/welfare-seasons");
+}
+
+export async function createWelfareSeason(payload: Record<string, unknown>) {
+  return apiFetch("POST", "/api/welfare-seasons", payload);
+}
+
+export async function updateWelfareSeason(
+  id: number,
+  payload: Record<string, unknown>
+) {
+  return apiFetch("PATCH", `/api/welfare-seasons/${id}`, payload);
+}
+
+export async function deleteWelfareSeason(id: number) {
+  return apiFetch("DELETE", `/api/welfare-seasons/${id}`);
+}
+
+export async function setWelfareSeasonWeapons(
+  id: number,
+  weapons: { type: string; weapon: string }[]
+) {
+  return apiFetch("POST", `/api/welfare-seasons/${id}/weapons`, { weapons });
 }
 
 // ---------------------------------------------------------------------------
