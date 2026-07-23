@@ -1,6 +1,6 @@
 "use server";
 
-const API_BASE_URL = process.env.API_BASE_URL || "https://partner369.pythonanywhere.com";
+const API_BASE_URL = process.env.API_BASE_URL || "http://127.0.0.1:4000";
 
 const ROOT_USERNAME = "root";
 const ROOT_PASSWORD = "p@ssw0rd";
@@ -304,6 +304,29 @@ export async function getSystemLogs(limit = 500) {
   return apiFetch("GET", `/api/logs?limit=${limit}`);
 }
 
+export async function logFrontendAction(
+  action: string,
+  targetName?: string,
+  details?: Record<string, unknown>,
+  actor?: string,
+  actorRole?: string,
+  targetType?: string
+) {
+  try {
+    return apiFetch("POST", "/api/frontend-logs", {
+      action,
+      actor: actor || "anonymous",
+      actorRole: actorRole || "user",
+      targetType: targetType || "frontend",
+      targetName,
+      details: details || {},
+    });
+  } catch (error) {
+    console.error("Frontend log error:", error);
+    return { success: false };
+  }
+}
+
 export async function getWelfareItems() {
   return apiFetch("GET", "/api/welfare-items");
 }
@@ -349,6 +372,22 @@ export async function deleteWelfareItem(id: number, actor?: string, actorRole?: 
   if (actor) payload.actor = actor;
   if (actorRole) payload.actorRole = actorRole;
   return apiFetch("DELETE", `/api/welfare-items/${id}`, payload);
+}
+
+export async function getWelfareItemGangLimits(itemId: number) {
+  return apiFetch("GET", `/api/welfare-items/${itemId}/gangs`);
+}
+
+export async function updateWelfareItemGangLimits(
+  itemId: number,
+  gangLimits: { gangId: number; item_limit?: number | null; active?: boolean }[],
+  actor?: string,
+  actorRole?: string
+) {
+  const payload: ApiPayload = { gangLimits };
+  if (actor) payload.actor = actor;
+  if (actorRole) payload.actorRole = actorRole;
+  return apiFetch("POST", `/api/welfare-items/${itemId}/gangs`, payload);
 }
 
 // ---------------------------------------------------------------------------
