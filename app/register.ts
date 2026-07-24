@@ -1,6 +1,6 @@
 "use server";
 
-const API_BASE_URL = process.env.API_BASE_URL || "https://partner369.pythonanywhere.com/";
+const API_BASE_URL = process.env.API_BASE_URL || "http://127.0.0.1:4000";
 
 const ROOT_USERNAME = "root";
 const ROOT_PASSWORD = "p@ssw0rd";
