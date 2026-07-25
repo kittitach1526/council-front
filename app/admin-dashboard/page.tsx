@@ -9,7 +9,6 @@ import {
   getAllUniformFiles,
   updateUniformStatus,
   getLeaveRequests,
-  logFrontendAction,
   getAllGangs,
 } from "../register";
 import { useStatusModal } from "../components/StatusModalProvider";
@@ -163,7 +162,6 @@ export default function AdminDashboard() {
   }, [activeTab, adminData]);
 
   const handleLogout = () => {
-    logFrontendAction("ออกจากระบบ", "admin-dashboard", undefined, currentActor, currentActorRole, "admin_dashboard");
     localStorage.removeItem("currentAdmin");
     router.push("/");
   };
@@ -495,14 +493,16 @@ export default function AdminDashboard() {
                             <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${
                               file.status === "ลงแล้ว"
                                 ? "bg-white/10 text-white border-white/20"
+                                : file.status === "ปฏิเสธ"
+                                ? "bg-red-500/10 text-red-300 border-red-500/20"
                                 : "bg-white/5 text-zinc-400 border-white/10"
                             }`}>
-                              {file.status === "ลงแล้ว" ? "✓ ลงแล้ว" : "⏳ รอลง"}
+                              {file.status === "ลงแล้ว" ? "✓ ลงแล้ว" : file.status === "ปฏิเสธ" ? "✕ ปฏิเสธ" : "⏳ รอลง"}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-zinc-400 text-xs font-mono">{file.createdAt}</td>
                           <td className="px-6 py-4 text-center">
-                            {file.status !== "ลงแล้ว" ? (
+                            {file.status === "รอลง" ? (
                               <div className="flex justify-center gap-2">
                                 <button
                                   onClick={() => handleOutfitAction(file.id, "ลงแล้ว")}
@@ -517,6 +517,8 @@ export default function AdminDashboard() {
                                   ปฏิเสธ
                                 </button>
                               </div>
+                            ) : file.status === "ปฏิเสธ" ? (
+                              <span className="text-red-400 text-xs font-medium">✕ ปฏิเสธแล้ว</span>
                             ) : (
                               <span className="text-zinc-500 text-xs">-</span>
                             )}
@@ -587,13 +589,15 @@ export default function AdminDashboard() {
                             <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${
                               file.status === "ลงแล้ว"
                                 ? "bg-white/10 text-white border-white/20"
+                                : file.status === "ปฏิเสธ"
+                                ? "bg-red-500/10 text-red-300 border-red-500/20"
                                 : "bg-white/5 text-zinc-400 border-white/10"
                             }`}>
-                              {file.status === "ลงแล้ว" ? "✓ ลงแล้ว" : "⏳ รอลง"}
+                              {file.status === "ลงแล้ว" ? "✓ ลงแล้ว" : file.status === "ปฏิเสธ" ? "✕ ปฏิเสธ" : "⏳ รอลง"}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-center">
-                            {file.status !== "ลงแล้ว" ? (
+                            {file.status === "รอลง" ? (
                               <div className="flex justify-center gap-2">
                                 <button
                                   onClick={() => handleOutfitAction(file.id, "ลงแล้ว")}
@@ -608,6 +612,8 @@ export default function AdminDashboard() {
                                   ปฏิเสธ
                                 </button>
                               </div>
+                            ) : file.status === "ปฏิเสธ" ? (
+                              <span className="text-red-400 text-xs font-medium">✕ ปฏิเสธแล้ว</span>
                             ) : (
                               <span className="text-zinc-500 text-xs">-</span>
                             )}

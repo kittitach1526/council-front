@@ -383,7 +383,7 @@ export default function RootDashboard() {
       </main>
 
       {editingUser && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-md bg-zinc-900/90 border border-white/10 rounded-2xl p-6 shadow-2xl">
             <h3 className="text-lg font-bold text-white mb-4">
               แก้ไขบัญชี{activeTab === "council" ? "สภา" : "แอดมิน"}
@@ -395,6 +395,7 @@ export default function RootDashboard() {
                   type="text"
                   name="name"
                   defaultValue={editingUser.name}
+                  autoFocus
                   required
                   className="w-full h-10 px-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white focus:border-indigo-400 focus:outline-none"
                 />

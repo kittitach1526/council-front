@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
   isOpen: boolean;
@@ -22,9 +23,9 @@ export default function Modal({ isOpen, onClose, title, children, className }: M
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
       onClick={onClose}
@@ -40,6 +41,7 @@ export default function Modal({ isOpen, onClose, title, children, className }: M
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

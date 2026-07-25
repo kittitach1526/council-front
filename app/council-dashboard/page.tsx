@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   getAllUniformFiles,
@@ -8,7 +8,6 @@ import {
   getAllGangs,
   getAllWelfareRequests,
   getLeaveRequests,
-  getSystemLogs,
   updateGangStatus,
   updateWelfareStatus,
   getPendingGangEditRequests,
@@ -27,7 +26,6 @@ import {
   deleteWelfareItem,
   getWelfareItemGangLimits,
   updateWelfareItemGangLimits,
-  logFrontendAction,
 } from "../register";
 import Modal from "../components/Modal";
 import { useStatusModal } from "../components/StatusModalProvider";
@@ -38,7 +36,7 @@ export default function CouncilAdminDashboard() {
   const [adminData, setAdminData] = useState<any>(null);
   const currentActor = adminData?.name || adminData?.username || "สภากลาง";
   const currentActorRole = adminData?.role || "council";
-  const [activeTab, setActiveTab] = useState<"approve_gang" | "approve_welfare" | "approve_leave" | "approve_uniform" | "approve_gang_edit" | "approve_disband" | "approve_pause" | "gang_list" | "rejected_gangs" | "welfare_by_gang" | "welfare_items" | "approve_logs">("approve_gang");
+  const [activeTab, setActiveTab] = useState<"approve_gang" | "approve_welfare" | "approve_leave" | "approve_uniform" | "approve_gang_edit" | "approve_disband" | "approve_pause" | "gang_list" | "rejected_gangs" | "welfare_by_gang" | "welfare_items">("approve_gang");
   const [loading, setLoading] = useState(false);
   const [selectedGangAbbr, setSelectedGangAbbr] = useState("");
   
@@ -51,7 +49,6 @@ export default function CouncilAdminDashboard() {
   const [disbandRequests, setDisbandRequests] = useState<any[]>([]);
   const [pauseRequests, setPauseRequests] = useState<any[]>([]);
   const [welfareItems, setWelfareItems] = useState<any[]>([]);
-  const [systemLogs, setSystemLogs] = useState<any[]>([]);
   const [welfareItemName, setWelfareItemName] = useState("");
   const [welfareItemType, setWelfareItemType] = useState("");
   const [welfareItemGangLimit, setWelfareItemGangLimit] = useState("");
@@ -66,6 +63,8 @@ export default function CouncilAdminDashboard() {
   const [editingWelfareItemForGangs, setEditingWelfareItemForGangs] = useState<any>(null);
   const [welfareGangLimits, setWelfareGangLimits] = useState<any[]>([]);
   const [welfareGangLimitsLoading, setWelfareGangLimitsLoading] = useState(false);
+  const [welfareGangFilter, setWelfareGangFilter] = useState("all");
+  const [welfareGangSearch, setWelfareGangSearch] = useState("");
 
   // 1. ตรวจสอบสิทธิ์ผู้ดูแลระบบสภากลาง
   useEffect(() => {
@@ -157,15 +156,6 @@ export default function CouncilAdminDashboard() {
           }
         }
 
-        if (activeTab === "approve_logs") {
-          const result = await getSystemLogs();
-          if (result.success) {
-            setSystemLogs(result.logs || []);
-          } else {
-            setSystemLogs([]);
-          }
-        }
-
       } catch (error) {
         console.error("🚨 ระบบหลังบ้านขัดข้อง:", error);
       } finally {
@@ -177,10 +167,22 @@ export default function CouncilAdminDashboard() {
   }, [activeTab]);
 
   const handleLogout = () => {
-    logFrontendAction("ออกจากระบบ", "council-dashboard", undefined, currentActor, currentActorRole, "council_dashboard");
     localStorage.removeItem("currentCouncil");
     router.push("/");
   };
+
+  const filteredWelfareGangLimits = useMemo(() => {
+    const term = welfareGangSearch.trim().toLowerCase();
+    return welfareGangLimits.filter((g) => {
+      const type = g.type || "Gang";
+      const matchType = welfareGangFilter === "all" || type === welfareGangFilter;
+      const matchSearch =
+        !term ||
+        ((g.fullName || "").toLowerCase().includes(term)) ||
+        ((g.abbreviation || "").toLowerCase().includes(term));
+      return matchType && matchSearch;
+    });
+  }, [welfareGangLimits, welfareGangFilter, welfareGangSearch]);
 
   // --- Handlers จัดการฐานข้อมูลและ UI ---
   const handleApproveGang = async (id: number, status: "approved" | "disbanded") => {
@@ -316,6 +318,8 @@ export default function CouncilAdminDashboard() {
   const openWelfareGangModal = async (item: any) => {
     setEditingWelfareItemForGangs(item);
     setIsWelfareGangModalOpen(true);
+    setWelfareGangFilter("all");
+    setWelfareGangSearch("");
     setWelfareGangLimitsLoading(true);
     try {
       const result = await getWelfareItemGangLimits(item.id);
@@ -341,6 +345,8 @@ export default function CouncilAdminDashboard() {
     setIsWelfareGangModalOpen(false);
     setEditingWelfareItemForGangs(null);
     setWelfareGangLimits([]);
+    setWelfareGangFilter("all");
+    setWelfareGangSearch("");
   };
 
   const updateWelfareGangLimit = (gangId: number, value: string) => {
@@ -498,7 +504,6 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
     { id: "rejected_gangs", label: "แก๊งไม่ได้รับอนุมัติ", icon: "❌" },
     { id: "welfare_by_gang", label: "สวัสดิการตามแก๊ง", icon: "🎁" },
     { id: "welfare_items", label: "จัดการรายการสวัสดิการ", icon: "📦" },
-    { id: "approve_logs", label: "ประวัติการกระทำ", icon: "📝" },
   ] as const;
 
   const pendingGangCount = gangsList.filter((g) => g.status === "pending" || g.status === "รอยุบ").length;
@@ -1344,12 +1349,46 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       isOpen={isWelfareGangModalOpen}
                       onClose={closeWelfareGangModal}
                       title={editingWelfareItemForGangs ? `จัดการแก๊งสำหรับ ${editingWelfareItemForGangs.name}` : "จัดการแก๊ง"}
+                      className="max-w-4xl max-h-[85vh] overflow-y-auto"
                     >
-                      <form onSubmit={handleSaveWelfareGangLimits} className="flex flex-col gap-4 max-h-[60vh]">
+                      <form onSubmit={handleSaveWelfareGangLimits} className="flex flex-col gap-4 max-h-[70vh]">
                         {welfareGangLimitsLoading ? (
                           <div className="text-center py-8 text-zinc-500">⏳ กำลังโหลดข้อมูลแก๊ง...</div>
                         ) : (
                           <>
+                            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                              <div className="flex flex-wrap gap-2">
+                                {[
+                                  { key: "all", label: "ทั้งหมด" },
+                                  { key: "Gang", label: "แก๊ง" },
+                                  { key: "Gangs-LD", label: "แก๊งหญิง" },
+                                  { key: "Family", label: "ครอบครัว" },
+                                ].map((f) => (
+                                  <button
+                                    key={f.key}
+                                    type="button"
+                                    onClick={() => setWelfareGangFilter(f.key)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                      welfareGangFilter === f.key
+                                        ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                                        : "bg-zinc-800 text-zinc-400 border-white/10 hover:bg-zinc-700"
+                                    }`}
+                                  >
+                                    {f.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <input
+                                type="text"
+                                value={welfareGangSearch}
+                                onChange={(e) => setWelfareGangSearch(e.target.value)}
+                                placeholder="ค้นหาชื่อแก๊งหรือย่อ..."
+                                className="w-full sm:w-56 h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none"
+                              />
+                            </div>
+                            <div className="text-[10px] text-zinc-500">
+                              แสดง {filteredWelfareGangLimits.length} จาก {welfareGangLimits.length} แก๊ง
+                            </div>
                             <div className="overflow-y-auto border border-white/[0.06] rounded-xl max-h-[45vh]">
                               <table className="w-full text-xs text-left">
                                 <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/[0.06] sticky top-0">
@@ -1361,13 +1400,13 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/[0.04]">
-                                  {welfareGangLimits.length === 0 ? (
-                                    <tr><td colSpan={4} className="text-center py-8 text-zinc-500">ไม่มีแก๊งในระบบ</td></tr>
+                                  {filteredWelfareGangLimits.length === 0 ? (
+                                    <tr><td colSpan={4} className="text-center py-8 text-zinc-500">ไม่พบแก๊งตามเงื่อนไข</td></tr>
                                   ) : (
-                                    welfareGangLimits.map((g) => (
+                                    filteredWelfareGangLimits.map((g) => (
                                       <tr key={g.id} className="text-zinc-300">
                                         <td className="px-4 py-3">{g.fullName}</td>
-                                        <td className="px-4 py-3 text-center text-zinc-400">{g.type || '-'}</td>
+                                        <td className="px-4 py-3 text-center text-zinc-400">{(g.type || "Gang") === "Gang" ? "แก๊ง" : (g.type || "Gang") === "Gangs-LD" ? "แก๊งหญิง" : g.type === "Family" ? "ครอบครัว" : g.type || '-'}</td>
                                         <td className="px-4 py-3 text-center">
                                           <input
                                             type="checkbox"
@@ -1470,63 +1509,6 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                   </div>
                 </div>
               )}
-
-              {/* MENU 10: Logs */}
-              {activeTab === "approve_logs" && (
-                <div className="flex flex-col w-full">
-                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">📝 ประวัติการกระทำ</h2>
-                    <span className="text-xs text-zinc-500">แสดง {systemLogs.length} รายการ</span>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left">
-                      <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/[0.06]">
-                        <tr>
-                          <th className="px-6 py-4 w-40">เวลา</th>
-                          <th className="px-6 py-4 w-40">ผู้กระทำ</th>
-                          <th className="px-6 py-4">รายละเอียดการกระทำ</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                        {systemLogs.length === 0 ? (
-                          <tr><td colSpan={3} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มี log ในระบบ</td></tr>
-                        ) : (
-                          systemLogs.map((log) => (
-                            <tr key={log.id} className="hover:bg-white/[0.01] transition-colors">
-                              <td className="px-6 py-4 text-zinc-400 align-top">{new Date(log.createdAt).toLocaleString("th-TH")}</td>
-                              <td className="px-6 py-4 align-top">
-                                <div className="font-medium text-white">{log.actor || "-"}</div>
-                                <div className="text-[10px] text-zinc-500 mt-0.5">{log.actorRole || "-"}</div>
-                              </td>
-                              <td className="px-6 py-4 text-zinc-300 align-top">
-                                <div className="mb-1">{log.description || `${log.action} ${log.targetType || ""} ${log.targetId ? `#${log.targetId}` : ""}`.trim()}</div>
-                                {log.details && typeof log.details === "object" && (
-                                  <div className="text-[10px] text-zinc-500 mt-1 font-mono">
-                                    {log.details.request && (
-                                      <span className="inline-block mr-3">
-                                        {log.details.request.method} {log.details.request.path}
-                                      </span>
-                                    )}
-                                    {log.details.response_status !== undefined && (
-                                      <span className="inline-block mr-3">สถานะ {log.details.response_status}</span>
-                                    )}
-                                  </div>
-                                )}
-                                {log.details && (
-                                  <pre className="text-[10px] text-zinc-500 mt-1 font-mono bg-zinc-950/30 p-2 rounded max-h-32 overflow-auto max-w-2xl">
-{JSON.stringify(log.details, null, 2)}
-                                  </pre>
-                                )}
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
             </div>
           )}
           </div>

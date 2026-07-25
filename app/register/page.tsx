@@ -1,14 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { createRegistration } from "../register"; // 👈 นำเข้า Server Action จากไฟล์ register.ts
+import { useEffect, useState } from "react";
+import { createRegistration, getCouncilNames } from "../register"; // 👈 นำเข้า Server Action จากไฟล์ register.ts
 import { useStatusModal } from "../components/StatusModalProvider";
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [colorTheme, setColorTheme] = useState("#3b82f6"); // State สำหรับผูกค่าสี HEX และ Color Picker
+  const [councilNames, setCouncilNames] = useState<string[]>([]);
   const showStatus = useStatusModal();
+
+  // โหลดรายชื่อสภาสำหรับ dropdown ผู้อนุมัติ
+  useEffect(() => {
+    const loadCouncilNames = async () => {
+      const result = await getCouncilNames();
+      if (result.success && Array.isArray(result.names)) {
+        setCouncilNames(result.names);
+      }
+    };
+    loadCouncilNames();
+  }, []);
 
   // ฟังก์ชันครอบตอนกด Submit ฟอร์ม
   const clientAction = async (formData: FormData) => {
@@ -102,7 +114,7 @@ export default function Home() {
                     type="text" 
                     value={colorTheme.replace("#", "")} 
                     onChange={(e) => {
-                      let val = e.target.value;
+                      const val = e.target.value;
                       if (val.length <= 6) {
                         setColorTheme(`#${val}`);
                       }
@@ -170,7 +182,12 @@ export default function Home() {
             {/* ─── โซนผู้อนุมัติแก๊ง ─── */}
             <div className="flex flex-col gap-2 sm:col-span-2">
               <label className="text-sm font-medium text-zinc-200">ชื่อของผู้อนุมัติ (Approver)</label>
-              <input type="text" name="approver" placeholder="ชื่อผู้มีอำนาจอนุมัติ" className="w-full h-11 px-4 rounded-xl bg-white/5 border border-white/10 focus:border-blue-400 focus:outline-none text-sm" required />
+              <select name="approver" className="w-full h-11 px-4 rounded-xl bg-zinc-900 border border-white/10 text-sm text-white focus:border-blue-400 focus:outline-none" required>
+                <option value="">-- เลือกผู้อนุมัติ --</option>
+                {councilNames.map((name, index) => (
+                  <option key={`${name}-${index}`} value={name}>{name}</option>
+                ))}
+              </select>
             </div>
 
           </div>
