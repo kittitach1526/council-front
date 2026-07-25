@@ -632,6 +632,15 @@ export default function GangDashboard() {
     return item;
   };
 
+  const getWelfareReceiverName = (req: any) => {
+    const details = parseDetails(req.details);
+    const type = req.requestType;
+    if (type === "receive") return details.receiverName || "-";
+    if (type === "trade") return details.tradeToName || "-";
+    if (type === "leave") return details.leaveName || "-";
+    return "-";
+  };
+
   const WelfareRequestsTable = ({ requests, title, emptyText }: { requests: any[]; title: string; emptyText: string }) => (
     <div className="flex flex-col gap-4 w-full">
       <h2 className="text-lg font-bold text-pink-400">{title}</h2>
@@ -641,15 +650,17 @@ export default function GangDashboard() {
             <tr>
               <th className="px-4 py-3">ผู้ยื่นเรื่อง / Discord</th>
               <th className="px-4 py-3">รายการ</th>
+              <th className="px-4 py-3">ผู้รับ</th>
               <th className="px-4 py-3">รายละเอียด</th>
               <th className="px-4 py-3">วันที่ยื่น</th>
               <th className="px-4 py-3 text-center">สถานะ</th>
+              <th className="px-4 py-3">อนุมัติโดย</th>
             </tr>
           </thead>
           <tbody>
             {requests.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-8 text-zinc-500">
+                <td colSpan={7} className="text-center py-8 text-zinc-500">
                   {emptyText}
                 </td>
               </tr>
@@ -681,6 +692,9 @@ export default function GangDashboard() {
                     <td className="px-4 py-3 text-zinc-200 font-medium">
                       {translateWelfareItem(req.welfareItem)}
                     </td>
+                    <td className="px-4 py-3 text-zinc-300">
+                      {getWelfareReceiverName(req)}
+                    </td>
                     <td className="px-4 py-3 text-zinc-300 text-xs max-w-[240px] truncate" title={extra}>
                       {extra}
                     </td>
@@ -698,6 +712,9 @@ export default function GangDashboard() {
                         {req.status === "เอาออกแล้ว" && "❌ เอาออกแล้ว"}
                         {req.status === "รอรับ" && "⏳ รอรับ"}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-400">
+                      {req.approvedBy || "-"}
                     </td>
                   </tr>
                 );

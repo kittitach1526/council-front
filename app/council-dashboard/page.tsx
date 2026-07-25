@@ -211,7 +211,7 @@ export default function CouncilAdminDashboard() {
       setLoading(false);
       if (result.success) {
         showStatus({ type: "success", message: `✨ อัปเดตคำขอสวัสดิการ ID: #${id} เป็น [${status}] เรียบร้อย` });
-        setWelfareRequests((prev) => prev.map((r) => r.id === id ? { ...r, status: status } : r));
+        setWelfareRequests((prev) => prev.map((r) => r.id === id ? { ...r, status: status, approvedBy: result.approvedBy || currentActor } : r));
       } else {
         showStatus({ type: result.success ? "success" : "error", message: result.message });
       }
@@ -476,6 +476,15 @@ const formatWelfareDetails = (req: any) => {
   if (type === "leave") {
     return `ผู้ยื่น: ${details.requesterName || req.requestName || "-"} (${details.requesterPhone || "-"}) → ออก: ${details.leaveName || "-"} (${details.leaveDiscord || "-"})${details.leavePhone ? ` ${details.leavePhone}` : ""}${details.weaponType ? ` [${details.weaponType}]` : ""}`;
   }
+  return "-";
+};
+
+const getWelfareReceiverName = (req: any) => {
+  const details = parseDetails(req.details);
+  const type = req.requestType;
+  if (type === "receive") return details.receiverName || "-";
+  if (type === "trade") return details.tradeToName || "-";
+  if (type === "leave") return details.leaveName || "-";
   return "-";
 };
 
@@ -847,13 +856,15 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                           <th className="px-6 py-4">ผู้ยื่นเรื่อง</th>
                           <th className="px-6 py-4">ประเภท</th>
                           <th className="px-6 py-4">รายการ</th>
+                          <th className="px-6 py-4">ผู้รับ</th>
                           <th className="px-6 py-4">รายละเอียด</th>
+                          <th className="px-6 py-4">อนุมัติโดย</th>
                           <th className="px-6 py-4 text-center">การดำเนินการ</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
                         {welfareRequests.length === 0 ? (
-                          <tr><td colSpan={6} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีคำขอสวัสดิการค้างในระบบ</td></tr>
+                          <tr><td colSpan={8} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีคำขอสวัสดิการค้างในระบบ</td></tr>
                         ) : (
                           welfareRequests.map((req) => (
                             <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
@@ -866,7 +877,9 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                               </td>
                               <td className="px-6 py-4 text-zinc-400">{welfareTypeLabel(req)}</td>
                               <td className="px-6 py-4 text-zinc-400">{translateWelfareItem(req.welfareItem)}</td>
+                              <td className="px-6 py-4 text-zinc-300">{getWelfareReceiverName(req)}</td>
                               <td className="px-6 py-4 text-zinc-400 max-w-[260px] truncate" title={formatWelfareDetails(req)}>{formatWelfareDetails(req)}</td>
+                              <td className="px-6 py-4 text-zinc-400 text-center">{req.approvedBy || "-"}</td>
                               <td className="px-6 py-4 text-center">
                                 {req.status !== "รับไปแล้ว" && req.status !== "เอาออกแล้ว" ? (
                                   <div className="flex justify-center gap-2">
@@ -1202,16 +1215,18 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                           <th className="px-6 py-4">ผู้ยื่นเรื่อง</th>
                           <th className="px-6 py-4">ประเภท</th>
                           <th className="px-6 py-4">รายการของรางวัล</th>
+                          <th className="px-6 py-4">ผู้รับ</th>
                           <th className="px-6 py-4">รายละเอียด</th>
                           <th className="px-6 py-4">สถานะ</th>
+                          <th className="px-6 py-4">อนุมัติโดย</th>
                           <th className="px-6 py-4">วันที่ยื่น</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
                         {!selectedGangAbbr ? (
-                          <tr><td colSpan={6} className="text-center py-20 text-zinc-600 font-light tracking-wide">👆 กรุณาเลือกแก๊งจากเมนูด้านบน</td></tr>
+                          <tr><td colSpan={8} className="text-center py-20 text-zinc-600 font-light tracking-wide">👆 กรุณาเลือกแก๊งจากเมนูด้านบน</td></tr>
                         ) : welfareRequests.filter(r => r.gangAbbreviation === selectedGangAbbr).length === 0 ? (
-                          <tr><td colSpan={6} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีประวัติการขอสวัสดิการของแก๊งนี้</td></tr>
+                          <tr><td colSpan={8} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีประวัติการขอสวัสดิการของแก๊งนี้</td></tr>
                         ) : (
                           welfareRequests.filter(r => r.gangAbbreviation === selectedGangAbbr).map((req) => (
                             <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
@@ -1223,12 +1238,14 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                               </td>
                               <td className="px-6 py-4 text-zinc-400">{welfareTypeLabel(req)}</td>
                               <td className="px-6 py-4 text-zinc-400">{translateWelfareItem(req.welfareItem)}</td>
+                              <td className="px-6 py-4 text-zinc-300">{getWelfareReceiverName(req)}</td>
                               <td className="px-6 py-4 text-zinc-400 max-w-[220px] truncate" title={formatWelfareDetails(req)}>{formatWelfareDetails(req)}</td>
                               <td className="px-6 py-4">
                                 <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${req.status === 'รับไปแล้ว' ? 'bg-white/[0.08] text-white border-white/[0.1]' : req.status === 'เอาออกแล้ว' ? 'bg-transparent text-zinc-600 border-transparent' : 'bg-white/[0.01] text-zinc-500 border-white/[0.04]'}`}>
                                   {req.status === 'รับไปแล้ว' ? '✓ ส่งมอบแล้ว' : req.status === 'เอาออกแล้ว' ? '✕ ยกเลิกคำขอ' : '⏳ รอรับ'}
                                 </span>
                               </td>
+                              <td className="px-6 py-4 text-zinc-400">{req.approvedBy || "-"}</td>
                               <td className="px-6 py-4 text-zinc-500">{req.createdAt}</td>
                             </tr>
                           ))
