@@ -89,6 +89,14 @@ export default function AdminDashboard() {
     return Array.from(new Set(gangs.filter((g) => g.status === "approved").map((g) => g.fullName).filter(Boolean)));
   }, [gangs]);
 
+  const gangTypeByName = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const g of gangs) {
+      if (g.fullName) map[g.fullName] = g.type || "Gang";
+    }
+    return map;
+  }, [gangs]);
+
   const outfitGangOptions = approvedGangNames;
 
   const perGangUniformFiles = useMemo(() => {
@@ -445,6 +453,7 @@ export default function AdminDashboard() {
                   <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/10 font-medium">
                     <tr>
                       <th className="px-6 py-4">แก๊ง</th>
+                      <th className="px-6 py-4">ประเภทแก๊ง</th>
                       <th className="px-6 py-4">ประเภทชุด</th>
                       <th className="px-6 py-4">สี</th>
                       <th className="px-6 py-4">ลิงก์ไฟล์</th>
@@ -457,7 +466,7 @@ export default function AdminDashboard() {
                   <tbody className="divide-y divide-white/10 text-zinc-300">
                     {sortedUniformFiles.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="text-center py-20 text-zinc-500 font-light tracking-wide">
+                        <td colSpan={9} className="text-center py-20 text-zinc-500 font-light tracking-wide">
                           📭 ไม่มีไฟล์ชุดในระบบ
                         </td>
                       </tr>
@@ -467,6 +476,7 @@ export default function AdminDashboard() {
                         return (
                         <tr key={file.id} className="hover:bg-white/5 transition-colors">
                           <td className="px-6 py-4 font-semibold text-white">{file.gangName}</td>
+                          <td className="px-6 py-4 text-zinc-300">{gangTypeByName[file.gangName] || "-"}</td>
                           <td className="px-6 py-4 text-zinc-400">{file.uniformType}</td>
                           <td className="px-6 py-4">
                             {details.colorName ? (
@@ -555,6 +565,7 @@ export default function AdminDashboard() {
                   <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/10 font-medium">
                     <tr>
                       <th className="px-6 py-4">แก๊ง</th>
+                      <th className="px-6 py-4">ประเภทแก๊ง</th>
                       <th className="px-6 py-4">ประเภทชุด</th>
                       <th className="px-6 py-4">ลิงก์ไฟล์</th>
                       <th className="px-6 py-4">เหตุผล</th>
@@ -565,7 +576,7 @@ export default function AdminDashboard() {
                   <tbody className="divide-y divide-white/10 text-zinc-300">
                     {perGangUniformFiles.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-20 text-zinc-500 font-light tracking-wide">
+                        <td colSpan={7} className="text-center py-20 text-zinc-500 font-light tracking-wide">
                           📭 ไม่มีไฟล์ชุดของแก๊งนี้
                         </td>
                       </tr>
@@ -573,6 +584,7 @@ export default function AdminDashboard() {
                       perGangUniformFiles.map((file) => (
                         <tr key={file.id} className="hover:bg-white/5 transition-colors">
                           <td className="px-6 py-4 font-semibold text-white">{file.gangName}</td>
+                          <td className="px-6 py-4 text-zinc-300">{gangTypeByName[file.gangName] || "-"}</td>
                           <td className="px-6 py-4 text-zinc-400">{file.uniformType}</td>
                           <td className="px-6 py-4">
                             <a
