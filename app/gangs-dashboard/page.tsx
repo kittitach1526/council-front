@@ -16,7 +16,7 @@ import {
   requestPauseGang,
   getPauseRequestByGang,
   getCouncilNames,
-  getWelfareItems,
+  getWelfareItemsForGang,
 } from "../register";
 import ImageUpload from "../components/ImageUpload";
 import { useStatusModal } from "../components/StatusModalProvider";
@@ -38,10 +38,11 @@ export default function GangDashboard() {
   const [councilNames, setCouncilNames] = useState<string[]>([]);
 
   // รายการสวัสดิการจากฐานข้อมูล
-  const [welfareItems, setWelfareItems] = useState<{ id: number; name: string; type: string; gang_limit?: number | null; female_gang_limit?: number | null; family_limit?: number | null }[]>([]);
+  const [welfareItems, setWelfareItems] = useState<{ id: number; name: string; type: string; gang_limit?: number | null; female_gang_limit?: number | null; family_limit?: number | null; item_limit?: number | null; per_gang_active?: number }[]>([]);
 
   const loadWelfareItems = async () => {
-    const result = await getWelfareItems();
+    if (!gangData?.abbreviation) return;
+    const result = await getWelfareItemsForGang(gangData.abbreviation);
     if (result.success && Array.isArray(result.items)) {
       setWelfareItems(result.items);
     }
@@ -231,7 +232,10 @@ export default function GangDashboard() {
     const removedStatuses = ["เอาออกแล้ว", "เอาสวัสดิการออกแล้ว"];
     const result: Record<number, { name: string; limit: number | null; used: number; remaining: number | null }> = {};
     for (const item of welfareItems) {
-      const limit = (item as any)[limitColumn] ?? null;
+      const perGangActive = item.per_gang_active !== 0;
+      const perGangLimit = perGangActive ? item.item_limit ?? null : null;
+      const legacyLimit = (item as any)[limitColumn] ?? null;
+      const limit = perGangLimit !== null ? perGangLimit : legacyLimit;
       const used = welfareRequests.filter(
         (r) =>
           r.welfareItem === item.name &&
@@ -645,7 +649,7 @@ export default function GangDashboard() {
     <div className="flex flex-col gap-4 w-full">
       <h2 className="text-lg font-bold text-pink-400">{title}</h2>
       <div className="overflow-x-auto w-full border border-white/10 rounded-xl bg-zinc-950/40">
-        <table className="w-full text-sm text-left text-zinc-200">
+        <table className="w-full min-w-full text-sm text-left text-zinc-200">
           <thead className="text-xs bg-white/5 text-zinc-400 border-b border-white/10 uppercase">
             <tr>
               <th className="px-4 py-3">ผู้ยื่นเรื่อง / Discord</th>
@@ -695,7 +699,7 @@ export default function GangDashboard() {
                     <td className="px-4 py-3 text-zinc-300">
                       {getWelfareReceiverName(req)}
                     </td>
-                    <td className="px-4 py-3 text-zinc-300 text-xs max-w-[240px] truncate" title={extra}>
+                    <td className="px-4 py-3 text-zinc-300 text-xs whitespace-nowrap" title={extra}>
                       {extra}
                     </td>
                     <td className="px-4 py-3 text-zinc-400 text-xs font-mono">

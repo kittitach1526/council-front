@@ -304,6 +304,10 @@ export async function getWelfareItems() {
   return apiFetch("GET", "/api/welfare-items");
 }
 
+export async function getWelfareItemsForGang(gangAbbreviation: string) {
+  return apiFetch("GET", `/api/welfare-items/gang/${encodeURIComponent(gangAbbreviation)}`);
+}
+
 export async function createWelfareItem(
   payload: {
     name: string;
