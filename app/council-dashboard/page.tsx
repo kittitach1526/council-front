@@ -10,6 +10,7 @@ import {
   getActiveWelfare,
   getLeaveRequests,
   updateGangStatus,
+  updateGang,
   updateWelfareStatus,
   getPendingGangEditRequests,
   approveGangEditRequest,
@@ -29,6 +30,7 @@ import {
   updateWelfareItemGangLimits,
 } from "../register";
 import Modal from "../components/Modal";
+import GangEditModal from "../components/GangEditModal";
 import { useStatusModal } from "../components/StatusModalProvider";
 
 export default function CouncilAdminDashboard() {
@@ -60,7 +62,9 @@ export default function CouncilAdminDashboard() {
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [newTypeInput, setNewTypeInput] = useState("");
   const [selectedGang, setSelectedGang] = useState<any>(null);
+  const [editingGang, setEditingGang] = useState<any>(null);
   const [isGangModalOpen, setIsGangModalOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [isWelfareGangModalOpen, setIsWelfareGangModalOpen] = useState(false);
   const [editingWelfareItemForGangs, setEditingWelfareItemForGangs] = useState<any>(null);
   const [welfareGangLimits, setWelfareGangLimits] = useState<any[]>([]);
@@ -520,6 +524,53 @@ const formatUniformDetails = (file: any) => {
     return `${p}${num ? ` #${num}` : ""}${old ? ` (เดิม #${old})` : ""}`;
   }).join(", ");
   return { ...details, piecesText };
+};
+
+const handleSaveGang = async (data: any) => {
+  if (!selectedGang || !data) return;
+  setLoading(true);
+  try {
+    const result = await updateGang(
+      selectedGang.id,
+      {
+        fullName: data.fullName,
+        abbreviation: data.abbreviation,
+        password: data.password,
+        colorTheme: data.colorTheme,
+        type: data.type,
+        leader: data.leader,
+        leaderDiscord: data.leaderDiscord,
+        leaderPhone: data.leaderPhone,
+        coLeader1: data.coLeader1,
+        coLeader1Discord: data.coLeader1Discord,
+        coLeader2: data.coLeader2,
+        coLeader2Discord: data.coLeader2Discord,
+        coLeader1Phone: data.coLeader1Phone,
+        coLeader2Phone: data.coLeader2Phone,
+        approver: data.approver,
+        logoUrl: data.logoUrl,
+        status: data.status,
+        editReason: data.editReason,
+      },
+      currentActor,
+      currentActorRole
+    );
+    if (result.success) {
+      showStatus({ type: "success", message: result.message || "📝 แก้ไขข้อมูลแก๊งเรียบร้อยแล้ว" });
+      const refreshed = await getAllGangs();
+      if (refreshed.success) setGangsList(refreshed.gangs || []);
+      setIsGangModalOpen(false);
+      setSelectedGang(null);
+      setEditingGang(null);
+    } else {
+      showStatus({ type: "error", message: result.message || "❌ ไม่สามารถแก้ไขข้อมูลแก๊งได้" });
+    }
+  } catch (error) {
+    console.error(error);
+    showStatus({ type: "error", message: "❌ เกิดข้อผิดพลาดในการเชื่อมต่อระบบ" });
+  } finally {
+    setLoading(false);
+  }
 };
 
 if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-light tracking-widest animate-pulse">🔒 ตรวจสอบสิทธิ์ผู้ดูแลระบบ...</div>;
@@ -1109,6 +1160,8 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                                         <button
                                           onClick={() => {
                                             setSelectedGang(gang);
+                                            setEditingGang({ ...gang });
+                                            setShowPassword(false);
                                             setIsGangModalOpen(true);
                                           }}
                                           className="text-left font-bold text-white hover:text-blue-300 transition-colors"
@@ -1173,6 +1226,8 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                                   <button
                                     onClick={() => {
                                       setSelectedGang(gang);
+                                      setEditingGang({ ...gang });
+                                      setShowPassword(false);
                                       setIsGangModalOpen(true);
                                     }}
                                     className="text-left font-bold text-white hover:text-blue-300 transition-colors"
@@ -1622,108 +1677,18 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
           )}
           </div>
 
-          <Modal
+          <GangEditModal
             isOpen={isGangModalOpen}
             onClose={() => {
               setIsGangModalOpen(false);
               setSelectedGang(null);
+              setEditingGang(null);
             }}
-            title={`👁️ ข้อมูลแก๊ง ${selectedGang?.fullName || ""}`}
-            className="max-w-3xl max-h-[85vh] overflow-y-auto"
-          >
-            {selectedGang && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="flex flex-col gap-1">
-                  <span className="text-zinc-500 uppercase tracking-wider">รหัสแก๊ง</span>
-                  <span className="text-zinc-200 font-mono">#{selectedGang.id}</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-zinc-500 uppercase tracking-wider">ชื่อเต็ม</span>
-                  <span className="text-zinc-200">{selectedGang.fullName}</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-zinc-500 uppercase tracking-wider">ชื่อย่อ</span>
-                  <span className="text-zinc-200 font-mono">{selectedGang.abbreviation}</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-zinc-500 uppercase tracking-wider">ประเภท</span>
-                  <span className="text-zinc-200">{selectedGang.type || "Gang"}</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-zinc-500 uppercase tracking-wider">สีแก๊ง</span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded border border-white/10" style={{ backgroundColor: selectedGang.colorTheme || "#3b82f6" }} />
-                    <span className="text-zinc-200 font-mono">{selectedGang.colorTheme || "#3b82f6"}</span>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-zinc-500 uppercase tracking-wider">สถานะ</span>
-                  <span className="text-zinc-200">{selectedGang.status}</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-zinc-500 uppercase tracking-wider">หัวหน้าแก๊ง</span>
-                  <span className="text-zinc-200">{selectedGang.leader}</span>
-                  <span className="text-zinc-400 text-[10px]">Discord: {selectedGang.leaderDiscord || "-"}</span>
-                  <span className="text-zinc-400 text-[10px]">โทรศัพท์: {selectedGang.leaderPhone || "-"}</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-zinc-500 uppercase tracking-wider">รองหัวหน้า 1</span>
-                  <span className="text-zinc-200">{selectedGang.coLeader1 || "-"}</span>
-                  {selectedGang.coLeader1 && (
-                    <>
-                      <span className="text-zinc-400 text-[10px]">Discord: {selectedGang.coLeader1Discord || "-"}</span>
-                      <span className="text-zinc-400 text-[10px]">โทรศัพท์: {selectedGang.coLeader1Phone || "-"}</span>
-                    </>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-zinc-500 uppercase tracking-wider">รองหัวหน้า 2</span>
-                  <span className="text-zinc-200">{selectedGang.coLeader2 || "-"}</span>
-                  {selectedGang.coLeader2 && (
-                    <>
-                      <span className="text-zinc-400 text-[10px]">Discord: {selectedGang.coLeader2Discord || "-"}</span>
-                      <span className="text-zinc-400 text-[10px]">โทรศัพท์: {selectedGang.coLeader2Phone || "-"}</span>
-                    </>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-zinc-500 uppercase tracking-wider">ผู้อนุมัติ</span>
-                  <span className="text-zinc-200">{selectedGang.approver || "-"}</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-zinc-500 uppercase tracking-wider">รหัสผ่าน</span>
-                  <span className="text-zinc-200 font-mono">********</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-zinc-500 uppercase tracking-wider">วันที่สร้าง</span>
-                  <span className="text-zinc-200">{selectedGang.createdAt ? new Date(selectedGang.createdAt).toLocaleString("th-TH") : "-"}</span>
-                </div>
-                {selectedGang.logoUrl && (
-                  <div className="sm:col-span-2 flex flex-col gap-2">
-                    <span className="text-zinc-500 uppercase tracking-wider">โลโก้แก๊ง</span>
-                    <a href={selectedGang.logoUrl} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline break-all">{selectedGang.logoUrl}</a>
-                  </div>
-                )}
-                {selectedGang.editReason && (
-                  <div className="sm:col-span-2 flex flex-col gap-1">
-                    <span className="text-zinc-500 uppercase tracking-wider">เหตุผลแก้ไขล่าสุด</span>
-                    <span className="text-zinc-200">{selectedGang.editReason}</span>
-                  </div>
-                )}
-                <div className="sm:col-span-2 flex justify-end pt-2">
-                  <button
-                    onClick={() => {
-                      setIsGangModalOpen(false);
-                      setSelectedGang(null);
-                    }}
-                    className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 border border-white/10 hover:bg-zinc-700 text-xs font-medium transition-all"
-                  >
-                    ปิด
-                  </button>
-                </div>
-              </div>
-            )}
-          </Modal>
+            gang={editingGang}
+            onSave={handleSaveGang}
+            loading={loading}
+            actor={currentActor}
+          />
 
         </main>
       </div>

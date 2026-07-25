@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   createUniformFile,
-  getAllUniformFiles,
+  getUniformFilesByGang,
   createGangEditRequest,
   getGangEditRequestByGang,
   createWelfareRequest,
@@ -204,9 +204,10 @@ export default function GangDashboard() {
     }
   };
 
-  // 2. ฟังก์ชันโหลดรายการไฟล์ชุดจากฐานข้อมูล SQLite
+  // 2. ฟังก์ชันโหลดรายการไฟล์ชุดของแก๊งตัวเองจากฐานข้อมูล SQLite
   const loadUniformFiles = async () => {
-    const result = await getAllUniformFiles();
+    if (!gangData?.fullName) return;
+    const result = await getUniformFilesByGang(gangData.fullName);
     if (result.success) {
       setUniformFiles(result.files || []);
     }
@@ -1725,7 +1726,7 @@ export default function GangDashboard() {
                   </thead>
                   <tbody>
                     {uniformFiles.length === 0 ? (
-                      <tr><td colSpan={6} className="text-center py-8 text-zinc-500">❌ ไม่พบประวัติข้อมูลไฟล์ชุดในระบบสภากลาง</td></tr>
+                      <tr><td colSpan={6} className="text-center py-8 text-zinc-500">❌ ไม่พบประวัติข้อมูลไฟล์ชุดของแก๊งคุณ</td></tr>
                     ) : (
                       uniformFiles.map((file) => {
                         const details = parseDetails(file.details);

@@ -168,6 +168,18 @@ export async function updateGangStatus(
   return apiFetch("PATCH", `/api/gangs/${id}/status`, payload);
 }
 
+export async function updateGang(
+  id: number,
+  data: Record<string, unknown>,
+  actor?: string,
+  actorRole?: string
+) {
+  const payload: ApiPayload = { ...data };
+  if (actor) payload.actor = actor;
+  if (actorRole) payload.actorRole = actorRole;
+  return apiFetch("PATCH", `/api/gangs/${id}`, payload);
+}
+
 // ---------------------------------------------------------------------------
 // Gang Edit Requests
 // ---------------------------------------------------------------------------
@@ -217,6 +229,11 @@ export async function createUniformFile(data: FormData | Record<string, unknown>
 
 export async function getAllUniformFiles() {
   return apiFetch("GET", "/api/uniform-files");
+}
+
+export async function getUniformFilesByGang(gangName: string) {
+  const query = gangName ? `?gang=${encodeURIComponent(gangName)}` : "";
+  return apiFetch("GET", `/api/uniform-files${query}`);
 }
 
 export async function updateUniformFileLink(
