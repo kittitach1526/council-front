@@ -7,6 +7,7 @@ import {
   updateUniformStatus,
   getAllGangs,
   getAllWelfareRequests,
+  getActiveWelfare,
   getLeaveRequests,
   updateGangStatus,
   updateWelfareStatus,
@@ -36,7 +37,7 @@ export default function CouncilAdminDashboard() {
   const [adminData, setAdminData] = useState<any>(null);
   const currentActor = adminData?.name || adminData?.username || "สภากลาง";
   const currentActorRole = adminData?.role || "council";
-  const [activeTab, setActiveTab] = useState<"approve_gang" | "approve_welfare" | "approve_leave" | "approve_uniform" | "approve_gang_edit" | "approve_disband" | "approve_pause" | "gang_list" | "rejected_gangs" | "welfare_by_gang" | "welfare_items">("approve_gang");
+  const [activeTab, setActiveTab] = useState<"approve_gang" | "approve_welfare" | "approve_leave" | "approve_uniform" | "approve_gang_edit" | "approve_disband" | "approve_pause" | "gang_list" | "rejected_gangs" | "welfare_by_gang" | "current_welfare" | "welfare_items">("approve_gang");
   const [loading, setLoading] = useState(false);
   const [selectedGangAbbr, setSelectedGangAbbr] = useState("");
   
@@ -49,6 +50,7 @@ export default function CouncilAdminDashboard() {
   const [disbandRequests, setDisbandRequests] = useState<any[]>([]);
   const [pauseRequests, setPauseRequests] = useState<any[]>([]);
   const [welfareItems, setWelfareItems] = useState<any[]>([]);
+  const [currentWelfare, setCurrentWelfare] = useState<any[]>([]);
   const [welfareItemName, setWelfareItemName] = useState("");
   const [welfareItemType, setWelfareItemType] = useState("");
   const [welfareItemGangLimit, setWelfareItemGangLimit] = useState("");
@@ -84,7 +86,7 @@ export default function CouncilAdminDashboard() {
 
       setLoading(true);
       try {
-        if (activeTab === "approve_gang" || activeTab === "gang_list" || activeTab === "rejected_gangs" || activeTab === "welfare_by_gang") {
+        if (activeTab === "approve_gang" || activeTab === "gang_list" || activeTab === "rejected_gangs" || activeTab === "welfare_by_gang" || activeTab === "current_welfare") {
           const result = await getAllGangs();
           if (result.success) {
             setGangsList(result.gangs || []);
@@ -165,6 +167,27 @@ export default function CouncilAdminDashboard() {
 
     fetchData();
   }, [activeTab]);
+
+  // โหลดรายการสวัสดิการปัจจุบัน (refetch เมื่อเปลี่ยนแก๊ง)
+  useEffect(() => {
+    const loadCurrentWelfare = async () => {
+      if (activeTab !== "current_welfare") return;
+      setLoading(true);
+      try {
+        const result = await getActiveWelfare(selectedGangAbbr);
+        if (result.success) {
+          setCurrentWelfare(result.items || []);
+        } else {
+          setCurrentWelfare([]);
+        }
+      } catch (error) {
+        console.error("🚨 โหลดสวัสดิการปัจจุบันล้มเหลว:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadCurrentWelfare();
+  }, [activeTab, selectedGangAbbr]);
 
   const handleLogout = () => {
     localStorage.removeItem("currentCouncil");
@@ -512,6 +535,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
     { id: "gang_list", label: "รายชื่อแก๊งทั้งหมด", icon: "📋" },
     { id: "rejected_gangs", label: "แก๊งไม่ได้รับอนุมัติ", icon: "❌" },
     { id: "welfare_by_gang", label: "สวัสดิการตามแก๊ง", icon: "🎁" },
+    { id: "current_welfare", label: "สวัสดิการปัจจุบัน", icon: "✅" },
     { id: "welfare_items", label: "จัดการรายการสวัสดิการ", icon: "📦" },
   ] as const;
 
@@ -1245,6 +1269,74 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                                   {req.status === 'รับไปแล้ว' ? '✓ ส่งมอบแล้ว' : req.status === 'เอาออกแล้ว' ? '✕ ยกเลิกคำขอ' : '⏳ รอรับ'}
                                 </span>
                               </td>
+                              <td className="px-6 py-4 text-zinc-400">{req.approvedBy || "-"}</td>
+                              <td className="px-6 py-4 text-zinc-500">{req.createdAt}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* MENU: สวัสดิการปัจจุบัน */}
+              {activeTab === "current_welfare" && (
+                <div className="flex flex-col w-full">
+                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">✅ รายการสวัสดิการปัจจุบัน</h2>
+                    <select
+                      value={selectedGangAbbr}
+                      onChange={(e) => setSelectedGangAbbr(e.target.value)}
+                      className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-300 text-xs focus:outline-none"
+                    >
+                      <option value="">-- แสดงทุกแก๊ง --</option>
+                      {[
+                        { key: "Gang", label: "Gang" },
+                        { key: "Gangs-LD", label: "Gang-LD" },
+                        { key: "Family", label: "Family" },
+                      ].map(({ key, label }) => {
+                        const group = gangsList.filter(
+                          (g) => (g.type || "Gang") === key && g.status === "approved"
+                        );
+                        return (
+                          <optgroup key={key} label={label}>
+                            {group.map((gang) => (
+                              <option key={gang.abbreviation} value={gang.abbreviation}>
+                                {gang.fullName} [{gang.abbreviation}]
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
+                    </select>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left whitespace-nowrap">
+                      <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/[0.06]">
+                        <tr>
+                          <th className="px-6 py-4">แก๊ง</th>
+                          <th className="px-6 py-4">รายการ</th>
+                          <th className="px-6 py-4">ผู้ถือปัจจุบัน</th>
+                          <th className="px-6 py-4">Discord</th>
+                          <th className="px-6 py-4">เบอร์โทร</th>
+                          <th className="px-6 py-4">ที่มา</th>
+                          <th className="px-6 py-4">อนุมัติโดย</th>
+                          <th className="px-6 py-4">วันที่</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.04] text-zinc-300">
+                        {currentWelfare.length === 0 ? (
+                          <tr><td colSpan={8} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่พบรายการสวัสดิการปัจจุบัน</td></tr>
+                        ) : (
+                          currentWelfare.map((req) => (
+                            <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
+                              <td className="px-6 py-4 font-medium text-white">{req.gangName}<span className="block text-zinc-500 font-mono">[{req.gangAbbreviation}]</span></td>
+                              <td className="px-6 py-4 text-zinc-300">{translateWelfareItem(req.welfareItem)}</td>
+                              <td className="px-6 py-4 text-zinc-200">{req.holderName}</td>
+                              <td className="px-6 py-4 text-zinc-400 font-mono">{req.holderDiscord}</td>
+                              <td className="px-6 py-4 text-zinc-400">{req.holderPhone || "-"}</td>
+                              <td className="px-6 py-4 text-zinc-400">{req.source === "เทรด" ? `เทรดจาก ${req.previousHolder || "-"}` : "รับ"}</td>
                               <td className="px-6 py-4 text-zinc-400">{req.approvedBy || "-"}</td>
                               <td className="px-6 py-4 text-zinc-500">{req.createdAt}</td>
                             </tr>

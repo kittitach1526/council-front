@@ -277,6 +277,18 @@ export async function getAllWelfareRequests() {
   return result;
 }
 
+export async function getActiveWelfare(gangAbbreviation?: string) {
+  const query = gangAbbreviation ? `?gang=${encodeURIComponent(gangAbbreviation)}` : "";
+  const result = await apiFetch("GET", `/api/welfare/active${query}`);
+  if (result.success && Array.isArray(result.items)) {
+    result.items = result.items.map((req: WelfareRequest) => ({
+      ...req,
+      createdAt: formatThaiDate(req.createdAt),
+    }));
+  }
+  return result;
+}
+
 export async function updateWelfareStatus(
   id: number,
   status: string,
