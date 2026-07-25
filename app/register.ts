@@ -289,6 +289,22 @@ export async function getActiveWelfare(gangAbbreviation?: string) {
   return result;
 }
 
+export async function getSheetData(username: string, password: string) {
+  const auth = Buffer.from(`${username}:${password}`).toString("base64");
+  const url = `${API_BASE_URL}/api/sheet`;
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    return data;
+  } catch (error) {
+    console.error("Sheet API Error:", error);
+    return { success: false, message: "❌ ไม่สามารถเชื่อมต่อกับระบบหลังบ้านได้" };
+  }
+}
+
 export async function updateWelfareStatus(
   id: number,
   status: string,
