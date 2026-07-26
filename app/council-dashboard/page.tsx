@@ -33,6 +33,49 @@ import Modal from "../components/Modal";
 import GangEditModal from "../components/GangEditModal";
 import { useStatusModal } from "../components/StatusModalProvider";
 
+function usePagination<T>(items: T[], perPage = 10, resetKey: any[] = []) {
+  const [page, setPage] = useState(1);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(items.length / perPage)), [items.length, perPage]);
+  const effectivePage = Math.min(page, totalPages);
+  const pagedItems = useMemo(() => {
+    const start = (effectivePage - 1) * perPage;
+    return items.slice(start, start + perPage);
+  }, [items, effectivePage, perPage]);
+  useEffect(() => {
+    setPage(1);
+  }, resetKey);
+  return { page: effectivePage, setPage, totalPages, pagedItems };
+}
+
+function PaginationControls({
+  page,
+  setPage,
+  totalPages,
+}: {
+  page: number;
+  setPage: (value: number | ((prev: number) => number)) => void;
+  totalPages: number;
+}) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="p-4 border-t border-white/[0.06] bg-white/[0.01] flex items-center justify-between">
+      <span className="text-xs text-zinc-500">หน้า {page} / {totalPages}</span>
+      <div className="flex items-center gap-2">
+        <button
+          disabled={page <= 1}
+          onClick={() => setPage((p) => p - 1)}
+          className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >← ก่อนหน้า</button>
+        <button
+          disabled={page >= totalPages}
+          onClick={() => setPage((p) => p + 1)}
+          className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >ถัดไป →</button>
+      </div>
+    </div>
+  );
+}
+
 export default function CouncilAdminDashboard() {
   const router = useRouter();
   const showStatus = useStatusModal();
@@ -42,7 +85,14 @@ export default function CouncilAdminDashboard() {
   const [activeTab, setActiveTab] = useState<"approve_gang" | "approve_welfare" | "approve_leave" | "approve_uniform" | "approve_gang_edit" | "approve_disband" | "approve_pause" | "gang_list" | "rejected_gangs" | "welfare_by_gang" | "current_welfare" | "welfare_items">("approve_gang");
   const [loading, setLoading] = useState(false);
   const [selectedGangAbbr, setSelectedGangAbbr] = useState("");
-  
+  const [approveWelfareGangFilter, setApproveWelfareGangFilter] = useState("all");
+  const [uniformGangFilter, setUniformGangFilter] = useState("all");
+  const [gangListPage, setGangListPage] = useState<Record<string, number>>({ Gang: 1, "Gangs-LD": 1, Family: 1 });
+  const [welfareStatusFilter, setWelfareStatusFilter] = useState<"all" | "approved" | "pending">("all");
+  const [welfarePage, setWelfarePage] = useState(1);
+  const GANGS_PER_PAGE = 10;
+  const WELFARE_PER_PAGE = 10;
+
   // Data States
   const [gangsList, setGangsList] = useState<any[]>([]);
   const [welfareRequests, setWelfareRequests] = useState<any[]>([]);
@@ -198,6 +248,82 @@ export default function CouncilAdminDashboard() {
     router.push("/");
   };
 
+  const nonLeaveWelfareRequests = useMemo(
+    () => welfareRequests.filter((r) => r.requestType !== "leave"),
+    [welfareRequests]
+  );
+
+  const filteredWelfareRequests = useMemo(() => {
+    if (approveWelfareGangFilter === "all") return nonLeaveWelfareRequests;
+    return nonLeaveWelfareRequests.filter((r) => (r.gangName || "") === approveWelfareGangFilter);
+  }, [nonLeaveWelfareRequests, approveWelfareGangFilter]);
+
+  const welfareGangOptions = useMemo(() => {
+    const names = Array.from(new Set(gangsList.filter((g) => g.status !== "disbanded").map((g) => g.fullName).filter(Boolean)));
+    return [{ label: "ทั้งหมด", value: "all" }, ...names.map((name) => ({ label: name, value: name }))];
+  }, [gangsList]);
+
+  const uniformGangOptions = useMemo(() => {
+    const names = Array.from(new Set(gangsList.filter((g) => g.status !== "disbanded").map((g) => g.fullName).filter(Boolean)));
+    return [{ label: "ทั้งหมด", value: "all" }, ...names.map((name) => ({ label: name, value: name }))];
+  }, [gangsList]);
+
+  const filteredUniformFiles = useMemo(() => {
+    if (uniformGangFilter === "all") return uniformFiles;
+    return uniformFiles.filter((f) => (f.gangName || "") === uniformGangFilter);
+  }, [uniformFiles, uniformGangFilter]);
+
+  const filteredWelfareByStatus = useMemo(() => {
+    if (welfareStatusFilter === "approved") {
+      return filteredWelfareRequests.filter((r) => r.status === "รับไปแล้ว");
+    }
+    if (welfareStatusFilter === "pending") {
+      return filteredWelfareRequests.filter((r) => r.status !== "รับไปแล้ว" && r.status !== "เอาออกแล้ว");
+    }
+    return filteredWelfareRequests;
+  }, [filteredWelfareRequests, welfareStatusFilter]);
+
+  const welfareTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredWelfareByStatus.length / WELFARE_PER_PAGE)),
+    [filteredWelfareByStatus.length]
+  );
+
+  const pagedWelfareRequests = useMemo(() => {
+    const start = (welfarePage - 1) * WELFARE_PER_PAGE;
+    return filteredWelfareByStatus.slice(start, start + WELFARE_PER_PAGE);
+  }, [filteredWelfareByStatus, welfarePage]);
+
+  useEffect(() => {
+    setWelfarePage(1);
+  }, [approveWelfareGangFilter, welfareStatusFilter]);
+
+  const pendingGangs = useMemo(
+    () => gangsList.filter((g) => g.status === "pending" || g.status === "รอยุบ"),
+    [gangsList]
+  );
+  const rejectedGangs = useMemo(
+    () => gangsList.filter((g) => g.status === "disbanded"),
+    [gangsList]
+  );
+  const welfareByGangList = useMemo(
+    () =>
+      selectedGangAbbr
+        ? welfareRequests.filter((r) => r.requestType !== "leave" && r.gangAbbreviation === selectedGangAbbr)
+        : [],
+    [welfareRequests, selectedGangAbbr]
+  );
+
+  const pendingGangPagination = usePagination(pendingGangs, 10);
+  const editRequestPagination = usePagination(editRequests, 10);
+  const disbandRequestPagination = usePagination(disbandRequests, 10);
+  const pauseRequestPagination = usePagination(pauseRequests, 10);
+  const leaveRequestPagination = usePagination(leaveRequests, 10);
+  const uniformPagination = usePagination(filteredUniformFiles, 10, [uniformGangFilter]);
+  const rejectedGangPagination = usePagination(rejectedGangs, 10);
+  const welfareByGangPagination = usePagination(welfareByGangList, 10, [selectedGangAbbr]);
+  const currentWelfarePagination = usePagination(currentWelfare, 10);
+  const welfareItemPagination = usePagination(welfareItems, 10);
+
   const filteredWelfareGangLimits = useMemo(() => {
     const term = welfareGangSearch.trim().toLowerCase();
     return welfareGangLimits.filter((g) => {
@@ -212,7 +338,7 @@ export default function CouncilAdminDashboard() {
   }, [welfareGangLimits, welfareGangFilter, welfareGangSearch]);
 
   // --- Handlers จัดการฐานข้อมูลและ UI ---
-  const handleApproveGang = async (id: number, status: "approved" | "disbanded") => {
+  const handleApproveGang = async (id: number, status: string) => {
     if (confirm(`ยืนยันการเปลี่ยนสถานะกลุ่มเป็น [${status}] หรือไม่?`)) {
       try {
         setLoading(true);
@@ -581,7 +707,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
     { id: "approve_disband", label: "อนุมัติยุบแก๊ง", icon: "⚠️" },
     { id: "approve_pause", label: "อนุมัติพักแก๊ง", icon: "⏸️" },
     { id: "approve_welfare", label: "แจกสวัสดิการ", icon: "🎁" },
-    { id: "approve_leave", label: "ออกลอย", icon: "🚪" },
+    { id: "approve_leave", label: "ออก - ออกลอย", icon: "🚪" },
     { id: "approve_uniform", label: "จัดการไฟล์ชุด", icon: "👕" },
     { id: "gang_list", label: "รายชื่อแก๊งทั้งหมด", icon: "📋" },
     { id: "rejected_gangs", label: "แก๊งไม่ได้รับอนุมัติ", icon: "❌" },
@@ -607,7 +733,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
       {/* Background Overlay มืดลึกแบบภาพยนตร์ */}
       <div className="absolute inset-0 bg-black/85 backdrop-blur-[6px]" />
 
-      <div className="relative z-10 flex w-full max-w-7xl mx-auto gap-6 p-4 md:p-8 items-start">
+      <div className="relative z-10 flex w-full gap-4 p-3 md:p-5 items-start">
 
         {/* ─── Sidebar Navigation (Desktop) ─── */}
         <aside className="hidden lg:flex flex-col w-64 shrink-0 gap-6 bg-gradient-to-b from-zinc-900/40 to-zinc-950/60 backdrop-blur-xl border border-white/[0.06] rounded-3xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.8)] p-6 sticky top-8">
@@ -643,7 +769,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
         </aside>
 
         {/* ─── Main Content ─── */}
-        <main className="relative z-10 flex flex-1 flex-col gap-6 bg-gradient-to-b from-zinc-900/40 to-zinc-950/60 backdrop-blur-xl border border-white/[0.06] rounded-3xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.8)] p-6 md:p-10 min-w-0">
+        <main className="relative z-10 flex flex-1 flex-col gap-6 bg-gradient-to-b from-zinc-900/40 to-zinc-950/60 backdrop-blur-xl border border-white/[0.06] rounded-3xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.8)] p-4 md:p-6 min-w-0">
 
           {/* Top Header Bar */}
           <div className="w-full flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-white/[0.06] pb-8">
@@ -737,10 +863,10 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                        {gangsList.filter(g => g.status === "pending" || g.status === "รอยุบ").length === 0 ? (
+                        {pendingGangPagination.pagedItems.length === 0 ? (
                           <tr><td colSpan={4} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีคำขออนุมัติค้างอยู่ในระบบ</td></tr>
                         ) : (
-                          gangsList.filter(g => g.status === "pending" || g.status === "รอยุบ").map((gang) => (
+                          pendingGangPagination.pagedItems.map((gang) => (
                             <tr key={gang.id} className="hover:bg-white/[0.01] transition-colors">
                               <td className="px-6 py-4 font-bold text-white">{gang.fullName} <span className="text-zinc-500 font-mono font-normal">[{gang.abbreviation}]</span></td>
                               <td className="px-6 py-4 text-zinc-400">{gang.leader}</td>
@@ -757,6 +883,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       </tbody>
                     </table>
                   </div>
+                  <PaginationControls page={pendingGangPagination.page} setPage={pendingGangPagination.setPage} totalPages={pendingGangPagination.totalPages} />
                 </div>
               )}
 
@@ -780,10 +907,10 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                        {editRequests.length === 0 ? (
+                        {editRequestPagination.pagedItems.length === 0 ? (
                           <tr><td colSpan={7} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีคำขอแก้ไขแก๊งค้างในระบบ</td></tr>
                         ) : (
-                          editRequests.map((req) => (
+                          editRequestPagination.pagedItems.map((req) => (
                             <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
                               <td className="px-6 py-4 font-bold text-white">{req.gang?.fullName} <span className="text-zinc-500 font-mono font-normal">[{req.gang?.abbreviation}]</span></td>
                               <td className="px-6 py-4 text-zinc-400">{req.fullName} <span className="text-zinc-600 font-mono">[{req.abbreviation}]</span></td>
@@ -807,7 +934,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                                   </div>
                                 ) : "-"}
                               </td>
-                              <td className="px-6 py-4 text-zinc-400 max-w-[200px] truncate">{req.editReason || "-"}</td>
+                              <td className="px-6 py-4 text-zinc-400 truncate">{req.editReason || "-"}</td>
                               <td className="px-6 py-4 text-center flex justify-center gap-2">
                                 <button onClick={() => handleApproveGangEdit(req.id, "approve")} className="px-4 py-1.5 bg-white/[0.08] hover:bg-white hover:text-black font-medium rounded-lg border border-white/[0.08] transition-all text-[11px] shadow-sm">อนุมัติ</button>
                                 <button onClick={() => handleApproveGangEdit(req.id, "reject")} className="px-4 py-1.5 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 border border-white/[0.04] rounded-lg transition-all text-[11px]">ปฏิเสธ</button>
@@ -818,6 +945,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       </tbody>
                     </table>
                   </div>
+                  <PaginationControls page={editRequestPagination.page} setPage={editRequestPagination.setPage} totalPages={editRequestPagination.totalPages} />
                 </div>
               )}
 
@@ -838,14 +966,14 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                        {disbandRequests.length === 0 ? (
+                        {disbandRequestPagination.pagedItems.length === 0 ? (
                           <tr><td colSpan={4} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีคำขอยุบแก๊งค้างในระบบ</td></tr>
                         ) : (
-                          disbandRequests.map((req) => (
+                          disbandRequestPagination.pagedItems.map((req) => (
                             <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
                               <td className="px-6 py-4 font-bold text-white">{req.gang?.fullName} <span className="text-zinc-500 font-mono font-normal">[{req.gang?.abbreviation}]</span></td>
                               <td className="px-6 py-4 text-zinc-400">{req.gang?.leader}</td>
-                              <td className="px-6 py-4 text-zinc-400 max-w-[200px] truncate">{req.reason || "-"}</td>
+                              <td className="px-6 py-4 text-zinc-400 truncate">{req.reason || "-"}</td>
                               <td className="px-6 py-4 text-center flex justify-center gap-2">
                                 <button onClick={() => handleApproveDisband(req.id, "approve")} className="px-4 py-1.5 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-300 font-medium rounded-lg border border-red-500/20 transition-all text-[11px] shadow-sm">อนุมัติยุบ</button>
                                 <button onClick={() => handleApproveDisband(req.id, "reject")} className="px-4 py-1.5 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 border border-white/[0.04] rounded-lg transition-all text-[11px]">ปฏิเสธ</button>
@@ -856,6 +984,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       </tbody>
                     </table>
                   </div>
+                  <PaginationControls page={disbandRequestPagination.page} setPage={disbandRequestPagination.setPage} totalPages={disbandRequestPagination.totalPages} />
                 </div>
               )}
 
@@ -879,14 +1008,14 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                        {pauseRequests.length === 0 ? (
+                        {pauseRequestPagination.pagedItems.length === 0 ? (
                           <tr><td colSpan={7} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีคำขอพักแก๊งค้างในระบบ</td></tr>
                         ) : (
-                          pauseRequests.map((req) => (
+                          pauseRequestPagination.pagedItems.map((req) => (
                             <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
                               <td className="px-6 py-4 font-bold text-white">{req.gang?.fullName} <span className="text-zinc-500 font-mono font-normal">[{req.gang?.abbreviation}]</span></td>
                               <td className="px-6 py-4 text-zinc-400">{req.gang?.leader}</td>
-                              <td className="px-6 py-4 text-zinc-400 max-w-[200px] truncate">{req.reason || "-"}</td>
+                              <td className="px-6 py-4 text-zinc-400 truncate">{req.reason || "-"}</td>
                               <td className="px-6 py-4 text-zinc-400">{req.approver || "-"}</td>
                               <td className="px-6 py-4 text-zinc-400">{req.durationDays ? `${req.durationDays} วัน` : "-"}</td>
                               <td className="px-6 py-4">
@@ -914,14 +1043,42 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       </tbody>
                     </table>
                   </div>
+                  <PaginationControls page={pauseRequestPagination.page} setPage={pauseRequestPagination.setPage} totalPages={pauseRequestPagination.totalPages} />
                 </div>
               )}
 
               {/* MENU 5: ยืนยันสวัสดิการ */}
               {activeTab === "approve_welfare" && (
                 <div className="flex flex-col w-full">
-                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01]">
+                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">🎁 ระบบพิจารณาเบิกจ่ายสวัสดิการสภา</h2>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2 text-sm text-zinc-300">
+                        <span>กรองตามสถานะ</span>
+                        <select
+                          value={welfareStatusFilter}
+                          onChange={(e) => setWelfareStatusFilter(e.target.value as any)}
+                          className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/10 text-zinc-200 text-sm focus:outline-none focus:border-purple-400"
+                        >
+                          <option value="all">ทั้งหมด</option>
+                          <option value="pending">ยังไม่อนุมัติ</option>
+                          <option value="approved">อนุมัติแล้ว</option>
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-zinc-300">
+                        <span>กรองตามแก๊ง</span>
+                        <select
+                          value={approveWelfareGangFilter}
+                          onChange={(e) => setApproveWelfareGangFilter(e.target.value)}
+                          className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/10 text-zinc-200 text-sm focus:outline-none focus:border-purple-400"
+                        >
+                          {welfareGangOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <span className="text-xs text-zinc-500">แสดง {pagedWelfareRequests.length} / {filteredWelfareByStatus.length} รายการ</span>
+                    </div>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs text-left whitespace-nowrap">
@@ -938,10 +1095,10 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                        {welfareRequests.length === 0 ? (
+                        {pagedWelfareRequests.length === 0 ? (
                           <tr><td colSpan={8} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีคำขอสวัสดิการค้างในระบบ</td></tr>
                         ) : (
-                          welfareRequests.map((req) => (
+                          pagedWelfareRequests.map((req) => (
                             <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
                               <td className="px-6 py-4 font-semibold text-white">{req.gangName} <span className="text-zinc-500">[{req.gangAbbreviation || req.gangAbbr}]</span></td>
                               <td className="px-6 py-4">
@@ -953,7 +1110,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                               <td className="px-6 py-4 text-zinc-400">{welfareTypeLabel(req)}</td>
                               <td className="px-6 py-4 text-zinc-400">{translateWelfareItem(req.welfareItem)}</td>
                               <td className="px-6 py-4 text-zinc-300">{getWelfareReceiverName(req)}</td>
-                              <td className="px-6 py-4 text-zinc-400 max-w-[260px] truncate" title={formatWelfareDetails(req)}>{formatWelfareDetails(req)}</td>
+                              <td className="px-6 py-4 text-zinc-400 truncate" title={formatWelfareDetails(req)}>{formatWelfareDetails(req)}</td>
                               <td className="px-6 py-4 text-zinc-400 text-center">{req.approvedBy || "-"}</td>
                               <td className="px-6 py-4 text-center">
                                 {req.status !== "รับไปแล้ว" && req.status !== "เอาออกแล้ว" ? (
@@ -973,6 +1130,27 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       </tbody>
                     </table>
                   </div>
+                  {filteredWelfareByStatus.length > WELFARE_PER_PAGE && (
+                    <div className="p-4 border-t border-white/[0.06] bg-white/[0.01] flex items-center justify-between">
+                      <span className="text-xs text-zinc-500">หน้า {welfarePage} / {welfareTotalPages}</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled={welfarePage <= 1}
+                          onClick={() => setWelfarePage((p) => Math.max(1, p - 1))}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        >
+                          ← ก่อนหน้า
+                        </button>
+                        <button
+                          disabled={welfarePage >= welfareTotalPages}
+                          onClick={() => setWelfarePage((p) => Math.min(welfareTotalPages, p + 1))}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        >
+                          ถัดไป →
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -995,10 +1173,10 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                        {leaveRequests.length === 0 ? (
+                        {leaveRequestPagination.pagedItems.length === 0 ? (
                           <tr><td colSpan={6} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีคำขอออกลอย</td></tr>
                         ) : (
-                          leaveRequests.map((req) => {
+                          leaveRequestPagination.pagedItems.map((req) => {
                             const details = parseDetails(req.details);
                             return (
                               <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
@@ -1050,14 +1228,30 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       </tbody>
                     </table>
                   </div>
+                  <PaginationControls page={leaveRequestPagination.page} setPage={leaveRequestPagination.setPage} totalPages={leaveRequestPagination.totalPages} />
                 </div>
               )}
 
               {/* MENU 3: ยืนยันชุด */}
               {activeTab === "approve_uniform" && (
                 <div className="flex flex-col w-full">
-                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01]">
+                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">👕 รายการตรวจสอบคลังชุดโมเดลสัญชาติ (.zip)</h2>
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                        <span>กรองตามแก๊ง</span>
+                        <select
+                          value={uniformGangFilter}
+                          onChange={(e) => setUniformGangFilter(e.target.value)}
+                          className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/10 text-zinc-200 text-sm focus:outline-none focus:border-purple-400"
+                        >
+                          {uniformGangOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <span className="text-xs text-zinc-500">แสดง {filteredUniformFiles.length} รายการ</span>
+                    </div>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs text-left whitespace-nowrap">
@@ -1073,10 +1267,10 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                        {uniformFiles.length === 0 ? (
+                        {uniformPagination.pagedItems.length === 0 ? (
                           <tr><td colSpan={7} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีรายงานไฟล์โมเดลชุดเครื่องแบบเข้ามาในระบบ</td></tr>
                         ) : (
-                          uniformFiles.map((file) => {
+                          uniformPagination.pagedItems.map((file) => {
                             const details = formatUniformDetails(file);
                             return (
                             <tr key={file.id} className="hover:bg-white/[0.01] transition-colors">
@@ -1092,7 +1286,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                               <td className="px-6 py-4">
                                 <a href={file.fileUrl} target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white underline underline-offset-4 transition-colors font-medium">📥 Download File</a>
                               </td>
-                              <td className="px-6 py-4 text-zinc-400 max-w-[220px] truncate">
+                              <td className="px-6 py-4 text-zinc-400 truncate">
                                 {details.piecesText ? details.piecesText : "-"}
                                 {details.internalPhone && <span className="block text-[10px] text-zinc-500">📞 {details.internalPhone}</span>}
                               </td>
@@ -1117,6 +1311,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       </tbody>
                     </table>
                   </div>
+                  <PaginationControls page={uniformPagination.page} setPage={uniformPagination.setPage} totalPages={uniformPagination.totalPages} />
                 </div>
               )}
 
@@ -1135,9 +1330,20 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       const list = gangsList.filter(
                         (g) => (g.type || "Gang") === key && g.status !== "disbanded"
                       );
+                      const page = gangListPage[key] || 1;
+                      const totalPages = Math.max(1, Math.ceil(list.length / GANGS_PER_PAGE));
+                      const start = (page - 1) * GANGS_PER_PAGE;
+                      const paginatedList = list.slice(start, start + GANGS_PER_PAGE);
+                      const setPage = (next: number) =>
+                        setGangListPage((prev) => ({ ...prev, [key]: Math.max(1, Math.min(totalPages, next)) }));
                       return (
                         <div key={key} className="flex flex-col gap-2">
-                          <h3 className="text-sm font-bold text-zinc-200">🏷️ {label}</h3>
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-bold text-zinc-200">🏷️ {label}</h3>
+                            {list.length > GANGS_PER_PAGE && (
+                              <span className="text-xs text-zinc-500">หน้า {page} / {totalPages}</span>
+                            )}
+                          </div>
                           <div className="overflow-x-auto border border-white/[0.04] rounded-xl">
                             <table className="w-full text-xs text-left whitespace-nowrap">
                               <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/[0.06]">
@@ -1150,10 +1356,10 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                                {list.length === 0 ? (
+                                {paginatedList.length === 0 ? (
                                   <tr><td colSpan={5} className="text-center py-8 text-zinc-600 font-light tracking-wide">📭 ไม่มีข้อมูลในหมวด {label}</td></tr>
                                 ) : (
-                                  list.map((gang) => (
+                                  paginatedList.map((gang) => (
                                     <tr key={gang.id} className="hover:bg-white/[0.01] transition-colors">
                                       <td className="px-6 py-4 font-mono text-zinc-600">#{gang.id}</td>
                                       <td className="px-6 py-4">
@@ -1188,6 +1394,24 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                               </tbody>
                             </table>
                           </div>
+                          {list.length > GANGS_PER_PAGE && (
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                disabled={page <= 1}
+                                onClick={() => setPage(page - 1)}
+                                className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                              >
+                                ← ก่อนหน้า
+                              </button>
+                              <button
+                                disabled={page >= totalPages}
+                                onClick={() => setPage(page + 1)}
+                                className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                              >
+                                ถัดไป →
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1202,7 +1426,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">❌ แก๊งไม่ได้รับอนุมัติ</h2>
                   </div>
                   <div className="overflow-x-auto p-4">
-                    {gangsList.filter((g) => g.status === "disbanded").length === 0 ? (
+                    {rejectedGangs.length === 0 ? (
                       <div className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีแก๊งที่ถูกปฏิเสธ</div>
                     ) : (
                       <table className="w-full text-xs text-left whitespace-nowrap border border-white/[0.04] rounded-xl">
@@ -1214,12 +1438,11 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                             <th className="px-6 py-4">สีแก๊ง</th>
                             <th className="px-6 py-4">ประเภท</th>
                             <th className="px-6 py-4">สถานะ</th>
+                            <th className="px-6 py-4 text-center">การดำเนินการ</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                          {gangsList
-                            .filter((g) => g.status === "disbanded")
-                            .map((gang) => (
+                          {rejectedGangPagination.pagedItems.map((gang) => (
                               <tr key={gang.id} className="hover:bg-white/[0.01] transition-colors">
                                 <td className="px-6 py-4 font-mono text-zinc-600">#{gang.id}</td>
                                 <td className="px-6 py-4">
@@ -1247,11 +1470,18 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                                 <td className="px-6 py-4">
                                   <span className="text-[10px] font-medium px-2.5 py-1 rounded-md bg-zinc-900/60 text-zinc-500 border border-white/[0.04]">ปฏิเสธ / ยุบ</span>
                                 </td>
+                                <td className="px-6 py-4 text-center">
+                                  <div className="flex justify-center gap-2">
+                                    <button onClick={() => handleApproveGang(gang.id, "pending")} className="px-3 py-1.5 bg-white/[0.08] hover:bg-white hover:text-black font-medium rounded-lg border border-white/[0.08] transition-all text-[11px] shadow-sm">กลับเป็นรออนุมัติ</button>
+                                    <button onClick={() => handleApproveGang(gang.id, "approved")} className="px-3 py-1.5 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 border border-white/[0.04] rounded-lg transition-all text-[11px]">อนุมัติ</button>
+                                  </div>
+                                </td>
                               </tr>
                             ))}
                         </tbody>
                       </table>
                     )}
+                    <PaginationControls page={rejectedGangPagination.page} setPage={rejectedGangPagination.setPage} totalPages={rejectedGangPagination.totalPages} />
                   </div>
                 </div>
               )}
@@ -1304,10 +1534,10 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
                         {!selectedGangAbbr ? (
                           <tr><td colSpan={8} className="text-center py-20 text-zinc-600 font-light tracking-wide">👆 กรุณาเลือกแก๊งจากเมนูด้านบน</td></tr>
-                        ) : welfareRequests.filter(r => r.gangAbbreviation === selectedGangAbbr).length === 0 ? (
+                        ) : welfareByGangList.length === 0 ? (
                           <tr><td colSpan={8} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีประวัติการขอสวัสดิการของแก๊งนี้</td></tr>
                         ) : (
-                          welfareRequests.filter(r => r.gangAbbreviation === selectedGangAbbr).map((req) => (
+                          welfareByGangPagination.pagedItems.map((req) => (
                             <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
                               <td className="px-6 py-4 font-medium text-white">
                                 {req.requestName}
@@ -1318,7 +1548,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                               <td className="px-6 py-4 text-zinc-400">{welfareTypeLabel(req)}</td>
                               <td className="px-6 py-4 text-zinc-400">{translateWelfareItem(req.welfareItem)}</td>
                               <td className="px-6 py-4 text-zinc-300">{getWelfareReceiverName(req)}</td>
-                              <td className="px-6 py-4 text-zinc-400 max-w-[220px] truncate" title={formatWelfareDetails(req)}>{formatWelfareDetails(req)}</td>
+                              <td className="px-6 py-4 text-zinc-400 truncate" title={formatWelfareDetails(req)}>{formatWelfareDetails(req)}</td>
                               <td className="px-6 py-4">
                                 <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${req.status === 'รับไปแล้ว' ? 'bg-white/[0.08] text-white border-white/[0.1]' : req.status === 'เอาออกแล้ว' ? 'bg-transparent text-zinc-600 border-transparent' : 'bg-white/[0.01] text-zinc-500 border-white/[0.04]'}`}>
                                   {req.status === 'รับไปแล้ว' ? '✓ ส่งมอบแล้ว' : req.status === 'เอาออกแล้ว' ? '✕ ยกเลิกคำขอ' : '⏳ รอรับ'}
@@ -1332,6 +1562,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       </tbody>
                     </table>
                   </div>
+                  <PaginationControls page={welfareByGangPagination.page} setPage={welfareByGangPagination.setPage} totalPages={welfareByGangPagination.totalPages} />
                 </div>
               )}
 
@@ -1381,10 +1612,10 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                        {currentWelfare.length === 0 ? (
+                        {currentWelfarePagination.pagedItems.length === 0 ? (
                           <tr><td colSpan={8} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่พบรายการสวัสดิการปัจจุบัน</td></tr>
                         ) : (
-                          currentWelfare.map((req) => (
+                          currentWelfarePagination.pagedItems.map((req) => (
                             <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
                               <td className="px-6 py-4 font-medium text-white">{req.gangName}<span className="block text-zinc-500 font-mono">[{req.gangAbbreviation}]</span></td>
                               <td className="px-6 py-4 text-zinc-300">{translateWelfareItem(req.welfareItem)}</td>
@@ -1400,6 +1631,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       </tbody>
                     </table>
                   </div>
+                  <PaginationControls page={currentWelfarePagination.page} setPage={currentWelfarePagination.setPage} totalPages={currentWelfarePagination.totalPages} />
                 </div>
               )}
 
@@ -1629,10 +1861,10 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                          {welfareItems.length === 0 ? (
+                          {welfareItemPagination.pagedItems.length === 0 ? (
                             <tr><td colSpan={3} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีรายการสวัสดิการในระบบ</td></tr>
                           ) : (
-                            welfareItems.map((item) => (
+                            welfareItemPagination.pagedItems.map((item) => (
                               <tr key={item.id} className="hover:bg-white/[0.01] transition-colors">
                                 <td className="px-6 py-4 font-medium text-white">{item.name}</td>
                                 <td className="px-6 py-4 text-zinc-400">
@@ -1670,6 +1902,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         </tbody>
                       </table>
                     </div>
+                    <PaginationControls page={welfareItemPagination.page} setPage={welfareItemPagination.setPage} totalPages={welfareItemPagination.totalPages} />
                   </div>
                 </div>
               )}

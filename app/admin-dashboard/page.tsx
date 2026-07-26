@@ -71,6 +71,9 @@ export default function AdminDashboard() {
   const [selectedGang, setSelectedGang] = useState<string>("ทั้งหมด");
   const [selectedOutfitGang, setSelectedOutfitGang] = useState<string>("");
   const [selectedLeaveGang, setSelectedLeaveGang] = useState<string>("ทั้งหมด");
+  const [uniformStatusFilter, setUniformStatusFilter] = useState<"all" | "pending" | "completed">("all");
+  const [uniformPage, setUniformPage] = useState(1);
+  const UNIFORM_PER_PAGE = 10;
 
   const filteredWelfareRequests = useMemo(() => {
     if (selectedGang === "ทั้งหมด") return welfareRequests;
@@ -84,6 +87,30 @@ export default function AdminDashboard() {
   const sortedUniformFiles = useMemo(() => {
     return [...uniformFiles].sort((a, b) => b.id - a.id);
   }, [uniformFiles]);
+
+  const filteredUniformFiles = useMemo(() => {
+    if (uniformStatusFilter === "pending") {
+      return sortedUniformFiles.filter((f) => f.status === "รอลง");
+    }
+    if (uniformStatusFilter === "completed") {
+      return sortedUniformFiles.filter((f) => f.status === "ลงแล้ว");
+    }
+    return sortedUniformFiles;
+  }, [sortedUniformFiles, uniformStatusFilter]);
+
+  const uniformTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredUniformFiles.length / UNIFORM_PER_PAGE)),
+    [filteredUniformFiles.length]
+  );
+
+  const pagedUniformFiles = useMemo(() => {
+    const start = (uniformPage - 1) * UNIFORM_PER_PAGE;
+    return filteredUniformFiles.slice(start, start + UNIFORM_PER_PAGE);
+  }, [filteredUniformFiles, uniformPage]);
+
+  useEffect(() => {
+    setUniformPage(1);
+  }, [uniformStatusFilter]);
 
   const approvedGangNames = useMemo(() => {
     return Array.from(new Set(gangs.filter((g) => g.status === "approved").map((g) => g.fullName).filter(Boolean)));
@@ -253,7 +280,7 @@ export default function AdminDashboard() {
     >
       <div className="absolute inset-0 bg-zinc-950/60 dark:bg-black/70 backdrop-blur-[2px]" />
 
-      <main className="relative z-10 flex w-full max-w-5xl flex-col gap-8 bg-white/10 dark:bg-zinc-900/20 backdrop-blur-md border border-white/20 dark:border-zinc-800/30 rounded-3xl shadow-2xl p-6 md:p-10 mx-4">
+      <main className="relative z-10 flex w-full flex-col gap-8 bg-white/10 dark:bg-zinc-900/20 backdrop-blur-md border border-white/20 dark:border-zinc-800/30 rounded-3xl shadow-2xl p-4 md:p-6 mx-4">
         {/* Header */}
         <div className="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/10 pb-6 gap-4">
           <div>
@@ -445,9 +472,23 @@ export default function AdminDashboard() {
             <div className="flex flex-col gap-8">
               {/* ตารางที่ 1: รวมรายการล่าสุดทุกแก๊ง */}
               <div className="overflow-x-auto rounded-2xl border border-white/10 bg-zinc-950/40">
-                <div className="p-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
+                <div className="p-4 border-b border-white/10 bg-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <h3 className="text-sm font-bold text-white">📋 รายการไฟล์ชุดล่าสุดทุกแก๊ง</h3>
-                  <span className="text-xs text-zinc-500">แสดง {sortedUniformFiles.length} รายการ</span>
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs text-zinc-300 flex items-center gap-2">
+                      <span>กรองตามสถานะ</span>
+                      <select
+                        value={uniformStatusFilter}
+                        onChange={(e) => setUniformStatusFilter(e.target.value as any)}
+                        className="h-9 px-3 rounded-xl bg-zinc-950 border border-white/10 text-zinc-200 text-xs focus:outline-none focus:border-purple-400"
+                      >
+                        <option value="all">ทั้งหมด</option>
+                        <option value="pending">ยังไม่ได้ลง</option>
+                        <option value="completed">ลงไปแล้ว</option>
+                      </select>
+                    </label>
+                    <span className="text-xs text-zinc-500">แสดง {pagedUniformFiles.length} / {filteredUniformFiles.length} รายการ</span>
+                  </div>
                 </div>
                 <table className="w-full text-xs text-left whitespace-nowrap">
                   <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/10 font-medium">
@@ -464,14 +505,14 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/10 text-zinc-300">
-                    {sortedUniformFiles.length === 0 ? (
+                    {pagedUniformFiles.length === 0 ? (
                       <tr>
                         <td colSpan={9} className="text-center py-20 text-zinc-500 font-light tracking-wide">
                           📭 ไม่มีไฟล์ชุดในระบบ
                         </td>
                       </tr>
                     ) : (
-                      sortedUniformFiles.map((file) => {
+                      pagedUniformFiles.map((file) => {
                         const details = parseDetails(file.details);
                         return (
                         <tr key={file.id} className="hover:bg-white/5 transition-colors">
@@ -498,7 +539,7 @@ export default function AdminDashboard() {
                               📥 ดาวน์โหลด
                             </a>
                           </td>
-                          <td className="px-6 py-4 text-zinc-400 max-w-[200px] truncate">{file.reason || "-"}</td>
+                          <td className="px-6 py-4 text-zinc-400 whitespace-normal">{file.reason || "-"}</td>
                           <td className="px-6 py-4">
                             <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${
                               file.status === "ลงแล้ว"
@@ -539,6 +580,29 @@ export default function AdminDashboard() {
                   )}
                   </tbody>
                 </table>
+                {filteredUniformFiles.length > UNIFORM_PER_PAGE && (
+                  <div className="p-4 border-t border-white/10 bg-white/5 flex items-center justify-between">
+                    <span className="text-xs text-zinc-500">
+                      หน้า {uniformPage} / {uniformTotalPages}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={uniformPage <= 1}
+                        onClick={() => setUniformPage((p) => Math.max(1, p - 1))}
+                        className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      >
+                        ← ก่อนหน้า
+                      </button>
+                      <button
+                        disabled={uniformPage >= uniformTotalPages}
+                        onClick={() => setUniformPage((p) => Math.min(uniformTotalPages, p + 1))}
+                        className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      >
+                        ถัดไป →
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ตารางที่ 2: เลือกดูตามแก๊ง */}
@@ -596,7 +660,7 @@ export default function AdminDashboard() {
                               📥 ดาวน์โหลด
                             </a>
                           </td>
-                          <td className="px-6 py-4 text-zinc-400 max-w-[200px] truncate">{file.reason || "-"}</td>
+                          <td className="px-6 py-4 text-zinc-400 whitespace-normal">{file.reason || "-"}</td>
                           <td className="px-6 py-4">
                             <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${
                               file.status === "ลงแล้ว"

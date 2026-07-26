@@ -73,12 +73,8 @@ export default function GangDashboard() {
     requesterDiscord: "",
     requesterPhone: "",
     requesterRole: "Leader" as "Leader" | "Deputy",
-    receiverName: "",
-    receiverDiscord: "",
-    receiverPhone: "",
-    welfareItemId: "",
-    welfareItemName: "",
-    category: "" as string,
+    receivers: [{ receiverName: "", receiverDiscord: "", receiverPhone: "" }],
+    selectedItems: [] as { id: number; name: string; type: string }[],
     carType: "Rebla" as string,
     licensePlate: "",
     carQuantity: "4",
@@ -413,35 +409,37 @@ export default function GangDashboard() {
 
     if (welfareSubTab === "receive") {
       requestType = "receive";
-      if (!welfareForm.receiverName || !welfareForm.receiverDiscord || !welfareForm.receiverPhone) {
-        showStatus({ type: "error", message: "❌ กรุณากรอกชื่อ เลขดิสคอร์ด และเบอร์โทรคนรับสวัสดิการ" });
+      if (welfareForm.selectedItems.length === 0) {
+        showStatus({ type: "error", message: "❌ กรุณาเลือกอย่างน้อย 1 รายการสวัสดิการ" });
         return;
       }
-      if (!welfareForm.welfareItemId) {
-        showStatus({ type: "error", message: "❌ กรุณาเลือกประเภทสวัสดิการ" });
+
+      const validReceivers = welfareForm.receivers.filter(
+        (r: any) => r.receiverName.trim() && r.receiverDiscord.trim() && r.receiverPhone.trim()
+      );
+      if (validReceivers.length === 0) {
+        showStatus({ type: "error", message: "❌ กรุณากรอกข้อมูลคนรับสวัสดิการอย่างน้อย 1 คน" });
         return;
       }
-      const selectedItem = welfareItems.find((i) => String(i.id) === welfareForm.welfareItemId);
-      if (!selectedItem) {
-        showStatus({ type: "error", message: "❌ ไม่พบรายการสวัสดิการที่เลือก" });
+
+      const hasCar = welfareForm.selectedItems.some((i) => i.type === "car");
+      if (hasCar && !welfareForm.licensePlate) {
+        showStatus({ type: "error", message: "❌ กรุณากรอกเลขทะเบียนรถ" });
         return;
       }
-      details.receiverName = welfareForm.receiverName;
-      details.receiverDiscord = welfareForm.receiverDiscord;
-      details.receiverPhone = welfareForm.receiverPhone;
-      details.welfareItemId = selectedItem.id;
-      details.welfareItemName = selectedItem.name;
-      details.category = selectedItem.type;
-      if (selectedItem.type === "car") {
-        if (!welfareForm.licensePlate) {
-          showStatus({ type: "error", message: "❌ กรุณากรอกเลขทะเบียนรถ" });
-          return;
-        }
+
+      details.receivers = validReceivers.map((r: any) => ({
+        receiverName: r.receiverName.trim(),
+        receiverDiscord: r.receiverDiscord.trim(),
+        receiverPhone: r.receiverPhone.trim(),
+      }));
+      details.items = welfareForm.selectedItems.map((i) => ({ id: i.id, name: i.name, type: i.type }));
+      if (hasCar) {
         details.carType = welfareForm.carType;
         details.licensePlate = welfareForm.licensePlate;
         details.carQuantity = welfareForm.carQuantity;
       }
-      welfareItem = selectedItem.name;
+      welfareItem = welfareForm.selectedItems[0].name;
     } else if (welfareSubTab === "trade") {
       requestType = "trade";
       if (
@@ -486,12 +484,8 @@ export default function GangDashboard() {
           requesterDiscord: "",
           requesterPhone: "",
           requesterRole: "Leader",
-          receiverName: "",
-          receiverDiscord: "",
-          receiverPhone: "",
-          welfareItemId: "",
-          welfareItemName: "",
-          category: "",
+          receivers: [{ receiverName: "", receiverDiscord: "", receiverPhone: "" }],
+          selectedItems: [],
           licensePlate: "",
           tradeHolderName: "",
           tradeHolderDiscord: "",
@@ -1171,70 +1165,116 @@ export default function GangDashboard() {
 
                 {welfareSubTab === "receive" && (
                   <div className="flex flex-col gap-4 border border-white/10 p-4 rounded-xl bg-white/[0.02]">
-                    <h3 className="text-sm font-bold text-zinc-200">ข้อมูลคนรับสวัสดิการ</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="flex flex-col gap-2">
-                        <label className="text-sm font-medium text-zinc-200">ชื่อคนรับสวัสดิการ</label>
-                        <input
-                          type="text"
-                          value={welfareForm.receiverName}
-                          onChange={(e) => setWelfareForm({ ...welfareForm, receiverName: e.target.value })}
-                          placeholder="ชื่อคนรับสวัสดิการ"
-                          className="w-full h-11 px-4 rounded-xl bg-white/5 border border-white/10 text-sm focus:border-purple-400 focus:outline-none"
-                          required
-                        />
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <label className="text-sm font-medium text-zinc-200">เลขดิสคอร์ดคนรับสวัสดิการ</label>
-                        <input
-                          type="text"
-                          value={welfareForm.receiverDiscord}
-                          onChange={(e) => setWelfareForm({ ...welfareForm, receiverDiscord: e.target.value })}
-                          placeholder="เช่น 4583920194857201"
-                          className="w-full h-11 px-4 rounded-xl bg-white/5 border border-white/10 text-sm focus:border-purple-400 focus:outline-none"
-                          required
-                        />
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <label className="text-sm font-medium text-zinc-200">เบอร์โทรคนรับสวัสดิการ</label>
-                        <input
-                          type="tel"
-                          value={welfareForm.receiverPhone}
-                          onChange={(e) => setWelfareForm({ ...welfareForm, receiverPhone: e.target.value })}
-                          placeholder="เบอร์โทร"
-                          className="w-full h-11 px-4 rounded-xl bg-white/5 border border-white/10 text-sm focus:border-purple-400 focus:outline-none"
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <label className="text-sm font-medium text-zinc-200">ประเภทสวัสดิการ</label>
-                      <select
-                        value={welfareForm.welfareItemId}
-                        onChange={(e) => {
-                          const selected = welfareItems.find((i) => String(i.id) === e.target.value);
-                          setWelfareForm({
-                            ...welfareForm,
-                            welfareItemId: e.target.value,
-                            welfareItemName: selected?.name || "",
-                            category: selected?.type || "",
-                          });
-                        }}
-                        className="w-full h-11 px-4 rounded-xl bg-zinc-900 border border-white/10 text-sm text-white focus:border-purple-400 focus:outline-none"
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-zinc-200">ข้อมูลคนรับสวัสดิการ</h3>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setWelfareForm((prev) => ({
+                            ...prev,
+                            receivers: [...prev.receivers, { receiverName: "", receiverDiscord: "", receiverPhone: "" }],
+                          }))
+                        }
+                        className="text-xs px-3 py-1.5 rounded-lg bg-purple-600/20 text-purple-300 border border-purple-500/30 hover:bg-purple-600/30 transition"
                       >
-                        <option value="">-- เลือกสวัสดิการ --</option>
+                        + เพิ่มคนรับ
+                      </button>
+                    </div>
+                    {welfareForm.receivers.map((receiver, index) => (
+                      <div key={index} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-4 items-end border border-white/5 p-3 rounded-xl bg-black/20">
+                        <div className="flex flex-col gap-2">
+                          <label className="text-sm font-medium text-zinc-200">ชื่อคนรับสวัสดิการ</label>
+                          <input
+                            type="text"
+                            value={receiver.receiverName}
+                            onChange={(e) => {
+                              const next = [...welfareForm.receivers];
+                              next[index].receiverName = e.target.value;
+                              setWelfareForm({ ...welfareForm, receivers: next });
+                            }}
+                            placeholder="ชื่อคนรับสวัสดิการ"
+                            className="w-full h-11 px-4 rounded-xl bg-white/5 border border-white/10 text-sm focus:border-purple-400 focus:outline-none"
+                            required
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-sm font-medium text-zinc-200">เลขดิสคอร์ด</label>
+                          <input
+                            type="text"
+                            value={receiver.receiverDiscord}
+                            onChange={(e) => {
+                              const next = [...welfareForm.receivers];
+                              next[index].receiverDiscord = e.target.value;
+                              setWelfareForm({ ...welfareForm, receivers: next });
+                            }}
+                            placeholder="เช่น 4583920194857201"
+                            className="w-full h-11 px-4 rounded-xl bg-white/5 border border-white/10 text-sm focus:border-purple-400 focus:outline-none"
+                            required
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-sm font-medium text-zinc-200">เบอร์โทร</label>
+                          <input
+                            type="tel"
+                            value={receiver.receiverPhone}
+                            onChange={(e) => {
+                              const next = [...welfareForm.receivers];
+                              next[index].receiverPhone = e.target.value;
+                              setWelfareForm({ ...welfareForm, receivers: next });
+                            }}
+                            placeholder="เบอร์โทร"
+                            className="w-full h-11 px-4 rounded-xl bg-white/5 border border-white/10 text-sm focus:border-purple-400 focus:outline-none"
+                            required
+                          />
+                        </div>
+                        {welfareForm.receivers.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = welfareForm.receivers.filter((_, i) => i !== index);
+                              setWelfareForm({ ...welfareForm, receivers: next });
+                            }}
+                            className="h-11 px-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition text-xs"
+                          >
+                            ลบ
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-medium text-zinc-200">เลือกรายการสวัสดิการ (เลือกได้หลายรายการ)</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto p-2 rounded-xl bg-zinc-900 border border-white/10">
                         {welfareItems.map((item) => {
                           const rem = welfareRemaining[item.id];
+                          const checked = welfareForm.selectedItems.some((i) => i.id === item.id);
                           return (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                              {rem && (rem.remaining === null ? " (ไม่จำกัด)" : ` (คงเหลือ ${rem.remaining})`)}
-                            </option>
+                            <label
+                              key={item.id}
+                              className="flex items-center gap-2 p-2 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer text-sm text-zinc-200"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const next = e.target.checked
+                                    ? [...welfareForm.selectedItems, { id: item.id, name: item.name, type: item.type }]
+                                    : welfareForm.selectedItems.filter((i) => i.id !== item.id);
+                                  setWelfareForm({ ...welfareForm, selectedItems: next });
+                                }}
+                                className="accent-purple-500 w-4 h-4"
+                              />
+                              <span className="flex-1">{item.name}</span>
+                              {rem && (
+                                <span className="text-xs text-zinc-500">
+                                  {rem.remaining === null ? "ไม่จำกัด" : `คงเหลือ ${rem.remaining}`}
+                                </span>
+                              )}
+                            </label>
                           );
                         })}
-                      </select>
+                      </div>
                     </div>
-                    {welfareForm.category === "car" && (
+                    {welfareForm.selectedItems.some((i) => i.type === "car") && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="flex flex-col gap-2 sm:col-span-1">
                           <label className="text-sm font-medium text-zinc-200">รถที่ขอรับ</label>
