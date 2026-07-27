@@ -25,7 +25,7 @@ export default function GangDashboard() {
   const router = useRouter();
   const showStatus = useStatusModal();
   const [gangData, setGangData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "edit" | "welfare" | "upload_uniform" | "view_uniforms" | "leave" | "pause" | "disband">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "edit" | "welfare" | "trade" | "upload_uniform" | "view_uniforms" | "leave" | "pause" | "disband">("overview");
   const [loading, setLoading] = useState(false);
   const [colorTheme, setColorTheme] = useState("#3b82f6");
   const [uniformFiles, setUniformFiles] = useState<any[]>([]);
@@ -48,7 +48,7 @@ export default function GangDashboard() {
     }
   };
 
-  // แท็บย่อยของสวัสดิการ
+  // แท็บย่อยของสวัสดิการ (sync กับเมนูหลัก)
   const [welfareSubTab, setWelfareSubTab] = useState<"receive" | "trade">("receive");
 
   // ฟอร์มเพิ่มไฟล์ชุด
@@ -276,11 +276,17 @@ export default function GangDashboard() {
     if (activeTab === "view_uniforms") {
       loadUniformFiles();
     }
-    if ((activeTab === "welfare" || activeTab === "leave") && gangData?.abbreviation) {
+    if ((activeTab === "welfare" || activeTab === "trade" || activeTab === "leave") && gangData?.abbreviation) {
       loadWelfareRequests(gangData.abbreviation);
     }
-    if (activeTab === "welfare") {
+    if (activeTab === "welfare" || activeTab === "trade") {
       loadWelfareItems();
+    }
+    if (activeTab === "welfare") {
+      setWelfareSubTab("receive");
+    }
+    if (activeTab === "trade") {
+      setWelfareSubTab("trade");
     }
     if (activeTab === "pause" && gangData?.id) {
       loadPendingPause(gangData.id);
@@ -780,6 +786,7 @@ export default function GangDashboard() {
     { id: "overview", label: "ภาพรวมแก๊ง", icon: "📊" },
     { id: "edit", label: "แก้ไขข้อมูล", icon: "⚙️" },
     { id: "welfare", label: "ยื่นสวัสดิการ", icon: "🎁" },
+    { id: "trade", label: "เทรดสวัสดิการ", icon: "🔄" },
     { id: "leave", label: "ออก - ออกลอย", icon: "🚪" },
     { id: "upload_uniform", label: "เพิ่มไฟล์ชุด", icon: "➕" },
     { id: "view_uniforms", label: "ดูไฟล์ทั้งหมด", icon: "📁" },
@@ -803,7 +810,7 @@ export default function GangDashboard() {
       {/* Background Overlay มืดลึกแบบภาพยนตร์ */}
       <div className="absolute inset-0 bg-black/85 backdrop-blur-[6px]" />
 
-      <div className="relative z-10 flex w-full max-w-7xl mx-auto gap-6 p-4 md:p-8 items-start">
+      <div className="relative z-10 flex w-full gap-4 p-2 md:p-4 items-start">
 
         {/* ─── Sidebar Navigation (Desktop) ─── */}
         <aside className="hidden lg:flex flex-col w-64 shrink-0 gap-6 bg-gradient-to-b from-zinc-900/40 to-zinc-950/60 backdrop-blur-xl border border-white/[0.06] rounded-3xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.8)] p-6 sticky top-8">
@@ -1110,27 +1117,29 @@ export default function GangDashboard() {
           )}
 
           {/* แท็บ 3: ยื่นสวัสดิการ / เทรด / ออกลอย */}
-          {activeTab === "welfare" && (
+          {(activeTab === "welfare" || activeTab === "trade") && (
             <div className="flex flex-col gap-8 w-full">
-              <div className="flex gap-2 bg-black/20 p-1.5 rounded-2xl w-full sm:w-fit">
-                {[
-                  { id: "receive", label: "รับสวัสดิการ" },
-                  { id: "trade", label: "เทรดสวัสดิการ" },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setWelfareSubTab(tab.id as any)}
-                    className={`px-4 py-2 rounded-xl text-xs font-medium transition-all ${
-                      welfareSubTab === tab.id
-                        ? "bg-white/10 text-white shadow"
-                        : "text-zinc-500 hover:text-zinc-300"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
+              {activeTab === "welfare" && (
+                <div className="flex gap-2 bg-black/20 p-1.5 rounded-2xl w-full sm:w-fit">
+                  {[
+                    { id: "receive", label: "รับสวัสดิการ" },
+                    { id: "trade", label: "เทรดสวัสดิการ" },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setWelfareSubTab(tab.id as any)}
+                      className={`px-4 py-2 rounded-xl text-xs font-medium transition-all ${
+                        welfareSubTab === tab.id
+                          ? "bg-white/10 text-white shadow"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {Object.keys(welfareRemaining).length > 0 && (
                 <div className="flex flex-col gap-3 border border-white/10 p-4 rounded-xl bg-white/[0.02]">
@@ -1152,8 +1161,7 @@ export default function GangDashboard() {
 
               <form onSubmit={handleRequestWelfareSubmit} className="flex flex-col gap-5 w-full text-white border-b border-white/10 pb-8">
                 <h2 className="text-lg font-bold text-purple-400">
-                  {welfareSubTab === "receive" && "🎁 ฟอร์มขอรับสวัสดิการ"}
-                  {welfareSubTab === "trade" && "🔄 ฟอร์มเทรดสวัสดิการ"}
+                  {activeTab === "trade" ? "🔄 ฟอร์มเทรดสวัสดิการ" : "🎁 ฟอร์มขอรับสวัสดิการ"}
                 </h2>
 
                 <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm">
@@ -1472,9 +1480,9 @@ export default function GangDashboard() {
 
               {/* ตารางประวัติสวัสดิการ */}
               <WelfareRequestsTable
-                requests={welfareRequests.filter((r) => r.requestType !== "leave")}
-                title="📋 ตารางตรวจสอบสถานะสวัสดิการภายในแก๊ง"
-                emptyText="❌ ยังไม่มีประวัติการยื่นขอรับสวัสดิการของแก๊งนี้ในระบบ"
+                requests={activeTab === "trade" ? welfareRequests.filter((r) => r.requestType === "trade") : welfareRequests.filter((r) => r.requestType !== "leave")}
+                title={activeTab === "trade" ? "📋 ประวัติการเทรดสวัสดิการ" : "📋 ตารางตรวจสอบสถานะสวัสดิการภายในแก๊ง"}
+                emptyText={activeTab === "trade" ? "❌ ยังไม่มีประวัติการเทรดสวัสดิการของแก๊งนี้" : "❌ ยังไม่มีประวัติการยื่นขอรับสวัสดิการของแก๊งนี้ในระบบ"}
               />
             </div>
           )}

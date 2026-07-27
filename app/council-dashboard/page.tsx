@@ -82,13 +82,15 @@ export default function CouncilAdminDashboard() {
   const [adminData, setAdminData] = useState<any>(null);
   const currentActor = adminData?.name || adminData?.username || "สภากลาง";
   const currentActorRole = adminData?.role || "council";
-  const [activeTab, setActiveTab] = useState<"approve_gang" | "approve_welfare" | "approve_leave" | "approve_uniform" | "approve_gang_edit" | "approve_disband" | "approve_pause" | "gang_list" | "disbanded_gangs" | "welfare_by_gang" | "current_welfare" | "welfare_items">("approve_gang");
+  const [activeTab, setActiveTab] = useState<"approve_gang" | "approve_welfare" | "approve_trade" | "approve_leave" | "approve_uniform" | "approve_gang_edit" | "approve_disband" | "approve_pause" | "gang_list" | "disbanded_gangs" | "welfare_by_gang" | "current_welfare" | "welfare_items">("approve_gang");
   const [loading, setLoading] = useState(false);
   const [selectedGangAbbr, setSelectedGangAbbr] = useState("");
   const [approveWelfareGangFilter, setApproveWelfareGangFilter] = useState("all");
+  const [approveTradeGangFilter, setApproveTradeGangFilter] = useState("all");
   const [uniformGangFilter, setUniformGangFilter] = useState("all");
   const [gangListPage, setGangListPage] = useState<Record<string, number>>({ Gang: 1, "Gangs-LD": 1, Family: 1 });
   const [welfareStatusFilter, setWelfareStatusFilter] = useState<"all" | "approved" | "pending">("all");
+  const [tradeStatusFilter, setTradeStatusFilter] = useState<"all" | "approved" | "pending">("all");
   const [welfarePage, setWelfarePage] = useState(1);
   const GANGS_PER_PAGE = 10;
   const WELFARE_PER_PAGE = 10;
@@ -149,7 +151,7 @@ export default function CouncilAdminDashboard() {
           }
         }
 
-        if (activeTab === "approve_welfare" || activeTab === "welfare_by_gang") {
+        if (activeTab === "approve_welfare" || activeTab === "approve_trade" || activeTab === "welfare_by_gang") {
           const result = await getAllWelfareRequests();
           if (result.success) {
             setWelfareRequests(result.requests || []);
@@ -256,15 +258,15 @@ export default function CouncilAdminDashboard() {
     router.push("/");
   };
 
-  const nonLeaveWelfareRequests = useMemo(
-    () => welfareRequests.filter((r) => r.requestType !== "leave"),
+  const receiveWelfareRequests = useMemo(
+    () => welfareRequests.filter((r) => r.requestType === "receive"),
     [welfareRequests]
   );
 
   const filteredWelfareRequests = useMemo(() => {
-    if (approveWelfareGangFilter === "all") return nonLeaveWelfareRequests;
-    return nonLeaveWelfareRequests.filter((r) => (r.gangName || "") === approveWelfareGangFilter);
-  }, [nonLeaveWelfareRequests, approveWelfareGangFilter]);
+    if (approveWelfareGangFilter === "all") return receiveWelfareRequests;
+    return receiveWelfareRequests.filter((r) => (r.gangName || "") === approveWelfareGangFilter);
+  }, [receiveWelfareRequests, approveWelfareGangFilter]);
 
   const welfareGangOptions = useMemo(() => {
     const names = Array.from(new Set(gangsList.filter((g) => g.status !== "disbanded").map((g) => g.fullName).filter(Boolean)));
@@ -306,6 +308,30 @@ export default function CouncilAdminDashboard() {
   useEffect(() => {
     setWelfarePage(1);
   }, [approveWelfareGangFilter, welfareStatusFilter]);
+
+  const tradeRequests = useMemo(
+    () => welfareRequests.filter((r) => r.requestType === "trade"),
+    [welfareRequests]
+  );
+
+  const filteredTradeRequests = useMemo(() => {
+    if (approveTradeGangFilter === "all") return tradeRequests;
+    return tradeRequests.filter((r) => (r.gangName || "") === approveTradeGangFilter);
+  }, [tradeRequests, approveTradeGangFilter]);
+
+  const filteredTradeByStatus = useMemo(() => {
+    if (tradeStatusFilter === "approved") {
+      return filteredTradeRequests.filter((r) => r.status === "รับไปแล้ว");
+    }
+    if (tradeStatusFilter === "pending") {
+      return filteredTradeRequests.filter(
+        (r) => r.status !== "รับไปแล้ว" && r.status !== "เอาออกแล้ว" && r.status !== "ออกแล้ว"
+      );
+    }
+    return filteredTradeRequests;
+  }, [filteredTradeRequests, tradeStatusFilter]);
+
+  const tradePagination = usePagination(filteredTradeByStatus, 10, [approveTradeGangFilter, tradeStatusFilter]);
 
   const pendingGangs = useMemo(
     () => gangsList.filter((g) => g.status === "pending" || g.status === "รอยุบ"),
@@ -728,6 +754,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
     { id: "approve_disband", label: "อนุมัติยุบแก๊ง", icon: "⚠️" },
     { id: "approve_pause", label: "อนุมัติพักแก๊ง", icon: "⏸️" },
     { id: "approve_welfare", label: "แจกสวัสดิการ", icon: "🎁" },
+    { id: "approve_trade", label: "เทรดสวัสดิการ", icon: "🔄" },
     { id: "approve_leave", label: "ออก - ออกลอย", icon: "🚪" },
     { id: "approve_uniform", label: "จัดการไฟล์ชุด", icon: "👕" },
     { id: "gang_list", label: "รายชื่อแก๊งทั้งหมด", icon: "📋" },
@@ -1174,6 +1201,119 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         <button
                           disabled={welfarePage >= welfareTotalPages}
                           onClick={() => setWelfarePage((p) => Math.min(welfareTotalPages, p + 1))}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        >
+                          ถัดไป →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* MENU 5.5: เทรดสวัสดิการ */}
+              {activeTab === "approve_trade" && (
+                <div className="flex flex-col w-full">
+                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">🔄 ระบบพิจารณาเทรดสวัสดิการ</h2>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2 text-sm text-zinc-300">
+                        <span>กรองตามสถานะ</span>
+                        <select
+                          value={tradeStatusFilter}
+                          onChange={(e) => setTradeStatusFilter(e.target.value as any)}
+                          className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/10 text-zinc-200 text-sm focus:outline-none focus:border-purple-400"
+                        >
+                          <option value="all">ทั้งหมด</option>
+                          <option value="pending">ยังไม่อนุมัติ</option>
+                          <option value="approved">อนุมัติแล้ว</option>
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-zinc-300">
+                        <span>กรองตามแก๊ง</span>
+                        <select
+                          value={approveTradeGangFilter}
+                          onChange={(e) => setApproveTradeGangFilter(e.target.value)}
+                          className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/10 text-zinc-200 text-sm focus:outline-none focus:border-purple-400"
+                        >
+                          {welfareGangOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <span className="text-xs text-zinc-500">แสดง {tradePagination.pagedItems.length} / {filteredTradeByStatus.length} รายการ</span>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left whitespace-nowrap">
+                      <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/[0.06]">
+                        <tr>
+                          <th className="px-6 py-4">แก๊ง</th>
+                          <th className="px-6 py-4">ผู้ยื่นเรื่อง</th>
+                          <th className="px-6 py-4">ประเภท</th>
+                          <th className="px-6 py-4">รายการ</th>
+                          <th className="px-6 py-4">ผู้รับ</th>
+                          <th className="px-6 py-4">รายละเอียด</th>
+                          <th className="px-6 py-4">อนุมัติโดย</th>
+                          <th className="px-6 py-4 text-center">การดำเนินการ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.04] text-zinc-300">
+                        {tradePagination.pagedItems.length === 0 ? (
+                          <tr><td colSpan={8} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีคำขอเทรดสวัสดิการค้างในระบบ</td></tr>
+                        ) : (
+                          tradePagination.pagedItems.map((req) => (
+                            <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
+                              <td className="px-6 py-4 font-semibold text-white">{req.gangName} <span className="text-zinc-500">[{req.gangAbbreviation || req.gangAbbr}]</span></td>
+                              <td className="px-6 py-4">
+                                <span className="block text-zinc-300 font-medium">{req.requestName}</span>
+                                <span className="text-[10px] text-zinc-500 font-mono">{req.discordId}</span>
+                                {(() => { const d = parseDetails(req.details); return d.requesterRole ? <span className="text-[10px] text-purple-300 block">({d.requesterRole})</span> : null; })()}
+                                {(() => { const d = parseDetails(req.details); return d.requesterPhone ? <span className="text-[10px] text-zinc-400 block">📞 {d.requesterPhone}</span> : null; })()}
+                              </td>
+                              <td className="px-6 py-4 text-zinc-400">{welfareTypeLabel(req)}</td>
+                              <td className="px-6 py-4 text-zinc-400">{translateWelfareItem(req.welfareItem)}</td>
+                              <td className="px-6 py-4 text-zinc-300">{getWelfareReceiverName(req)}</td>
+                              <td className="px-6 py-4 text-zinc-400 truncate" title={formatWelfareDetails(req)}>{formatWelfareDetails(req)}</td>
+                              <td className="px-6 py-4 text-zinc-400 text-center">{req.approvedBy || "-"}</td>
+                              <td className="px-6 py-4 text-center">
+                                {req.status !== "รับไปแล้ว" && req.status !== "เอาออกแล้ว" && req.status !== "ออกแล้ว" ? (
+                                  <div className="flex justify-center gap-2">
+                                    <button onClick={() => handleApproveWelfare(req.id, "รับไปแล้ว")} className="px-4 py-1.5 bg-white/[0.08] hover:bg-white hover:text-black font-medium rounded-lg border border-white/[0.08] transition-all text-[11px] shadow-sm">อนุมัติเทรด</button>
+                                    <button onClick={() => handleApproveWelfare(req.id, "เอาออกแล้ว")} className="px-4 py-1.5 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-500 rounded-lg transition-all text-[11px]">ยกเลิก</button>
+                                  </div>
+                                ) : (
+                                  <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${
+                                    req.status === "รับไปแล้ว"
+                                      ? "bg-white/[0.02] text-zinc-400 border-white/[0.06]"
+                                      : req.status === "ออกแล้ว"
+                                        ? "bg-zinc-600/30 text-zinc-300 border-zinc-500/30"
+                                        : "bg-transparent text-zinc-600 border-transparent"
+                                  }`}>
+                                    {req.status === "รับไปแล้ว" ? "✓ เทรดสำเร็จ" : req.status === "ออกแล้ว" ? "🚪 ออกแล้ว" : "✕ ยกเลิกคำขอ"}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {filteredTradeByStatus.length > WELFARE_PER_PAGE && (
+                    <div className="p-4 border-t border-white/[0.06] bg-white/[0.01] flex items-center justify-between">
+                      <span className="text-xs text-zinc-500">หน้า {tradePagination.page} / {tradePagination.totalPages}</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled={tradePagination.page <= 1}
+                          onClick={() => tradePagination.setPage((p) => Math.max(1, p - 1))}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        >
+                          ← ก่อนหน้า
+                        </button>
+                        <button
+                          disabled={tradePagination.page >= tradePagination.totalPages}
+                          onClick={() => tradePagination.setPage((p) => Math.min(tradePagination.totalPages, p + 1))}
                           className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                         >
                           ถัดไป →
