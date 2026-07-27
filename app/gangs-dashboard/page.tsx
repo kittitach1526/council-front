@@ -701,14 +701,18 @@ export default function GangDashboard() {
                       {req.createdAt}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-md border ${req.status === "รับไปแล้ว"
-                        ? "bg-green-500/20 text-green-300 border-green-500/30"
-                        : req.status === "เอาออกแล้ว"
-                          ? "bg-red-500/20 text-red-300 border-red-500/30"
-                          : "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                        }`}>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-md border ${
+                        req.status === "รับไปแล้ว"
+                          ? "bg-green-500/20 text-green-300 border-green-500/30"
+                          : req.status === "เอาออกแล้ว"
+                            ? "bg-red-500/20 text-red-300 border-red-500/30"
+                            : req.status === "ออกแล้ว"
+                              ? "bg-zinc-600/30 text-zinc-300 border-zinc-500/30"
+                              : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                      }`}>
                         {req.status === "รับไปแล้ว" && "✅ รับไปแล้ว"}
                         {req.status === "เอาออกแล้ว" && "❌ เอาออกแล้ว"}
+                        {req.status === "ออกแล้ว" && "🚪 ออกแล้ว"}
                         {req.status === "รอรับ" && "⏳ รอรับ"}
                       </span>
                     </td>
@@ -725,6 +729,51 @@ export default function GangDashboard() {
     </div>
   );
 
+  const WelfareHoldersList = ({ requests }: { requests: any[] }) => {
+    const byItem = useMemo(() => {
+      const activeOrLeft = requests.filter(
+        (r) =>
+          (r.requestType === "receive" || r.requestType === "trade") &&
+          (r.status === "รับไปแล้ว" || r.status === "ออกแล้ว")
+      );
+      return activeOrLeft.reduce<Record<string, any[]>>((acc, r) => {
+        const item = r.welfareItem || "อื่นๆ";
+        if (!acc[item]) acc[item] = [];
+        acc[item].push(r);
+        return acc;
+      }, {});
+    }, [requests]);
+
+    if (Object.keys(byItem).length === 0) return null;
+
+    return (
+      <div className="flex flex-col gap-3 border border-white/10 p-4 rounded-xl bg-white/[0.02]">
+        <h3 className="text-sm font-bold text-purple-400">รายชื่อผู้ถือสวัสดิการ (อยู่ในแก๊ง / ออกแล้ว)</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {Object.entries(byItem).map(([itemName, reqs]) => (
+            <div key={itemName} className="flex flex-col gap-2 p-3 rounded-lg bg-zinc-950 border border-white/[0.06]">
+              <span className="text-xs text-zinc-400 font-medium">{translateWelfareItem(itemName)}</span>
+              <ul className="flex flex-col gap-1">
+                {reqs.map((req) => (
+                  <li key={req.id} className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-300">{getWelfareReceiverName(req)}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                      req.status === "รับไปแล้ว"
+                        ? "bg-green-500/20 text-green-300 border border-green-500/30"
+                        : "bg-zinc-600/30 text-zinc-300 border border-zinc-500/30"
+                    }`}>
+                      {req.status === "รับไปแล้ว" ? "อยู่ในแก๊ง" : "🚪 ออกแล้ว"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   if (!gangData) return <div className="text-white text-center mt-20">กำลังโหลดข้อมูลแผงควบคุม...</div>;
 
   const navItems = [
@@ -739,7 +788,9 @@ export default function GangDashboard() {
   ] as const;
 
   const activeLabel = navItems.find((t) => t.id === activeTab)?.label || "";
-  const pendingWelfareCount = welfareRequests.filter((r) => r.status !== "รับไปแล้ว" && r.status !== "เอาออกแล้ว").length;
+  const pendingWelfareCount = welfareRequests.filter(
+    (r) => r.status !== "รับไปแล้ว" && r.status !== "เอาออกแล้ว" && r.status !== "เอาสวัสดิการออกแล้ว" && r.status !== "ออกแล้ว"
+  ).length;
   const pendingUniformCount = uniformFiles.filter((f) => f.status !== "ลงแล้ว").length;
   const pendingDisbandCount = pendingDisband?.status === "pending" ? 1 : 0;
   const pendingPauseCount = pendingPause?.status === "pending" || pendingPause?.status === "approved" ? 1 : 0;
@@ -1096,6 +1147,8 @@ export default function GangDashboard() {
                   </div>
                 </div>
               )}
+
+              <WelfareHoldersList requests={welfareRequests} />
 
               <form onSubmit={handleRequestWelfareSubmit} className="flex flex-col gap-5 w-full text-white border-b border-white/10 pb-8">
                 <h2 className="text-lg font-bold text-purple-400">

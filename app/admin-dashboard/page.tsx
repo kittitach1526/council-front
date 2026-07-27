@@ -236,9 +236,14 @@ export default function AdminDashboard() {
       const result = await updateWelfareStatus(id, status, currentActor, currentActorRole);
       if (result.success) {
         showStatus({ type: "success", message: result.message });
-        setLeaveRequests((prev) =>
-          prev.map((req) => (req.id === id ? { ...req, status } : req))
-        );
+        const [welfareResult, leaveResult] = await Promise.all([
+          getAllWelfareRequests(),
+          getLeaveRequests(),
+        ]);
+        if (welfareResult.success) setWelfareRequests(welfareResult.requests || []);
+        else setWelfareRequests([]);
+        if (leaveResult.success) setLeaveRequests(leaveResult.requests || []);
+        else setLeaveRequests([]);
       } else {
         showStatus({ type: "error", message: result.message });
       }
@@ -455,8 +460,12 @@ export default function AdminDashboard() {
                               </button>
                             </div>
                           ) : (
-                            <span className="text-[10px] font-medium px-2.5 py-1 rounded-md border bg-white/5 text-zinc-300 border-white/10">
-                              {req.status === "เอาสวัสดิการออกแล้ว" ? "✕ เอาสวัสดิการออกแล้ว" : "✕ ยกเลิกคำขอ"}
+                            <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${
+                              req.status === "ออกแล้ว"
+                                ? "bg-zinc-600/30 text-zinc-300 border-zinc-500/30"
+                                : "bg-white/5 text-zinc-300 border-white/10"
+                            }`}>
+                              {req.status === "เอาสวัสดิการออกแล้ว" ? "✕ เอาสวัสดิการออกแล้ว" : req.status === "ออกแล้ว" ? "🚪 ออกแล้ว" : "✕ ยกเลิกคำขอ"}
                             </span>
                           )}
                         </td>
@@ -769,16 +778,12 @@ export default function AdminDashboard() {
                         </td>
                         <td className="px-6 py-4 text-center">
                           {req.status === "รอรับ" ? (
-                            req.hasWelfare ? (
-                              <span className="text-[10px] text-rose-400 font-medium">ต้องเอาสวัสดิการออก</span>
-                            ) : (
-                              <button
-                                onClick={() => handleLeaveAction(req.id, "เอาสวัสดิการออกแล้ว")}
-                                className="px-4 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg transition-all text-[11px]"
-                              >
-                                เอาสวัสดิการออกแล้ว
-                              </button>
-                            )
+                            <button
+                              onClick={() => handleLeaveAction(req.id, "เอาสวัสดิการออกแล้ว")}
+                              className="px-4 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg transition-all text-[11px]"
+                            >
+                              เอาสวัสดิการออกแล้ว
+                            </button>
                           ) : (
                             <span className="text-zinc-500 text-xs">
                               {req.status === "เอาสวัสดิการออกแล้ว" ? "✓ เอาสวัสดิการออกแล้ว" : "-"}

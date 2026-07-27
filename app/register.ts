@@ -1,6 +1,6 @@
 "use server";
 
-const API_BASE_URL = process.env.API_BASE_URL || "https://partner369.pythonanywhere.com";
+const API_BASE_URL = process.env.API_BASE_URL || "http://127.0.0.1:4000";
 
 const ROOT_USERNAME = "root";
 const ROOT_PASSWORD = "p@ssw0rd";
@@ -318,6 +318,45 @@ export async function getSheetData(username: string, password: string) {
     return data;
   } catch (error) {
     console.error("Sheet API Error:", error);
+    return { success: false, message: "❌ ไม่สามารถเชื่อมต่อกับระบบหลังบ้านได้" };
+  }
+}
+
+export async function updateSheetRow(
+  table: string,
+  rowid: number,
+  values: Record<string, any>,
+  username: string,
+  password: string
+) {
+  const auth = Buffer.from(`${username}:${password}`).toString("base64");
+  const url = `${API_BASE_URL}/api/sheet/${encodeURIComponent(table)}/${rowid}`;
+  try {
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    const data = await res.json().catch(() => ({}));
+    return data;
+  } catch (error) {
+    console.error("Sheet Update Error:", error);
+    return { success: false, message: "❌ ไม่สามารถเชื่อมต่อกับระบบหลังบ้านได้" };
+  }
+}
+
+export async function deleteSheetRow(table: string, rowid: number, username: string, password: string) {
+  const auth = Buffer.from(`${username}:${password}`).toString("base64");
+  const url = `${API_BASE_URL}/api/sheet/${encodeURIComponent(table)}/${rowid}`;
+  try {
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    return data;
+  } catch (error) {
+    console.error("Sheet Delete Error:", error);
     return { success: false, message: "❌ ไม่สามารถเชื่อมต่อกับระบบหลังบ้านได้" };
   }
 }

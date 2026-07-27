@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getSheetData } from "../register";
+import { getSheetData, updateSheetRow, deleteSheetRow } from "../register";
 
 function getInitialRoot(): { username: string } | null {
   if (typeof window === "undefined") return null;
@@ -31,6 +31,7 @@ export default function SheetPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState<{ table: string; rowid: number; values: Record<string, string>; original: Record<string, any> } | null>(null);
 
   useEffect(() => {
     const saved = getInitialRoot();
@@ -45,6 +46,7 @@ export default function SheetPage() {
     if (!rootData) return;
     setLoading(true);
     setError("");
+    setEditing(null);
     const result = await getSheetData(rootData.username, password);
     if (result.success) {
       setTables(result.tables || []);
@@ -53,6 +55,64 @@ export default function SheetPage() {
     }
     setLoading(false);
   };
+
+  const startEditRow = (tableName: string, columns: string[], row: any) => {
+    const values: Record<string, string> = {};
+    const original: Record<string, any> = {};
+    for (const col of columns) {
+      const value = row[col];
+      original[col] = value;
+      if (value === null || value === undefined) {
+        values[col] = "";
+      } else if (typeof value === "object") {
+        values[col] = JSON.stringify(value);
+      } else {
+        values[col] = String(value);
+      }
+    }
+    setEditing({ table: tableName, rowid: row._rowid_, values, original });
+  };
+
+  const handleUpdateCell = (col: string, value: string) => {
+    if (!editing) return;
+    setEditing({ ...editing, values: { ...editing.values, [col]: value } });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editing || !rootData) return;
+    setLoading(true);
+    const payload: Record<string, any> = {};
+    for (const col of Object.keys(editing.values)) {
+      const raw = editing.values[col];
+      payload[col] = raw === "" && editing.original[col] == null ? null : raw;
+    }
+    const result = await updateSheetRow(editing.table, editing.rowid, payload, rootData.username, password);
+    if (result.success) {
+      setError("");
+      setEditing(null);
+      await handleLoad();
+    } else {
+      setError(result.message || "❌ ไม่สามารถอัปเดตข้อมูลได้");
+    }
+    setLoading(false);
+  };
+
+  const handleDeleteRow = async (table: string, rowid: number) => {
+    if (!rootData) return;
+    if (!confirm(`ยืนยันการลบแถว #${rowid} จากตาราง ${table}?`)) return;
+    setLoading(true);
+    const result = await deleteSheetRow(table, rowid, rootData.username, password);
+    if (result.success) {
+      setError("");
+      setEditing(null);
+      await handleLoad();
+    } else {
+      setError(result.message || "❌ ไม่สามารถลบข้อมูลได้");
+    }
+    setLoading(false);
+  };
+
+  const cancelEdit = () => setEditing(null);
 
   const filteredTables = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -146,6 +206,7 @@ export default function SheetPage() {
               </button>
             </div>
 
+            {error && <p className="text-xs text-red-400">{error}</p>}
             {filteredTables.map((table) => (
               <div
                 key={table.name}
@@ -172,29 +233,77 @@ export default function SheetPage() {
                             {col}
                           </th>
                         ))}
+                        <th className="px-4 py-3 font-medium whitespace-nowrap text-center border-l border-white/[0.06]">จัดการ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/[0.04] text-zinc-300">
                       {table.rows.length === 0 ? (
                         <tr>
-                          <td colSpan={table.columns.length} className="text-center py-8 text-zinc-600">
+                          <td colSpan={table.columns.length + 1} className="text-center py-8 text-zinc-600">
                             ไม่มีข้อมูล
                           </td>
                         </tr>
                       ) : (
-                        table.rows.map((row: any, idx: number) => (
-                          <tr key={idx} className="hover:bg-white/[0.02]">
-                            {table.columns.map((col: string) => {
-                              const value = row[col];
-                              const text = value === null || value === undefined ? "-" : typeof value === "object" ? JSON.stringify(value) : String(value);
-                              return (
-                                <td key={col} className="px-4 py-2.5 whitespace-nowrap border-r border-white/[0.03] last:border-r-0">
-                                  {text}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))
+                        table.rows.map((row: any, idx: number) => {
+                          const isEditing = editing?.table === table.name && editing?.rowid === row._rowid_;
+                          return (
+                            <tr key={row._rowid_ ?? idx} className={isEditing ? "bg-amber-500/5" : "hover:bg-white/[0.02]"}>
+                              {table.columns.map((col: string) => {
+                                const value = row[col];
+                                const display = value === null || value === undefined ? "-" : typeof value === "object" ? JSON.stringify(value) : String(value);
+                                return (
+                                  <td key={col} className="px-4 py-2 whitespace-nowrap border-r border-white/[0.03] last:border-r-0">
+                                    {isEditing ? (
+                                      <input
+                                        type="text"
+                                        value={editing!.values[col] ?? ""}
+                                        onChange={(e) => handleUpdateCell(col, e.target.value)}
+                                        className="w-full min-w-[80px] h-7 px-2 rounded bg-zinc-950 border border-white/[0.08] text-zinc-200 text-[11px] focus:border-amber-400 focus:outline-none"
+                                      />
+                                    ) : (
+                                      display
+                                    )}
+                                  </td>
+                                );
+                              })}
+                              <td className="px-4 py-2 whitespace-nowrap text-center border-l border-white/[0.06]">
+                                {isEditing ? (
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={handleSaveEdit}
+                                      disabled={loading}
+                                      className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 hover:bg-emerald-500/20 transition text-[10px] disabled:opacity-50"
+                                    >
+                                      บันทึก
+                                    </button>
+                                    <button
+                                      onClick={cancelEdit}
+                                      disabled={loading}
+                                      className="px-2 py-1 rounded bg-zinc-800 text-zinc-300 border border-white/[0.08] hover:bg-zinc-700 transition text-[10px] disabled:opacity-50"
+                                    >
+                                      ยกเลิก
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={() => startEditRow(table.name, table.columns, row)}
+                                      className="px-2 py-1 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20 transition text-[10px]"
+                                    >
+                                      แก้ไข
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteRow(table.name, row._rowid_)}
+                                      className="px-2 py-1 rounded bg-red-500/10 text-red-300 border border-red-500/20 hover:bg-red-500/20 transition text-[10px]"
+                                    >
+                                      ลบ
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>

@@ -82,7 +82,7 @@ export default function CouncilAdminDashboard() {
   const [adminData, setAdminData] = useState<any>(null);
   const currentActor = adminData?.name || adminData?.username || "สภากลาง";
   const currentActorRole = adminData?.role || "council";
-  const [activeTab, setActiveTab] = useState<"approve_gang" | "approve_welfare" | "approve_leave" | "approve_uniform" | "approve_gang_edit" | "approve_disband" | "approve_pause" | "gang_list" | "rejected_gangs" | "welfare_by_gang" | "current_welfare" | "welfare_items">("approve_gang");
+  const [activeTab, setActiveTab] = useState<"approve_gang" | "approve_welfare" | "approve_leave" | "approve_uniform" | "approve_gang_edit" | "approve_disband" | "approve_pause" | "gang_list" | "disbanded_gangs" | "welfare_by_gang" | "current_welfare" | "welfare_items">("approve_gang");
   const [loading, setLoading] = useState(false);
   const [selectedGangAbbr, setSelectedGangAbbr] = useState("");
   const [approveWelfareGangFilter, setApproveWelfareGangFilter] = useState("all");
@@ -140,7 +140,7 @@ export default function CouncilAdminDashboard() {
 
       setLoading(true);
       try {
-        if (activeTab === "approve_gang" || activeTab === "gang_list" || activeTab === "rejected_gangs" || activeTab === "welfare_by_gang" || activeTab === "current_welfare") {
+        if (activeTab === "approve_gang" || activeTab === "gang_list" || activeTab === "disbanded_gangs" || activeTab === "welfare_by_gang" || activeTab === "current_welfare") {
           const result = await getAllGangs();
           if (result.success) {
             setGangsList(result.gangs || []);
@@ -222,6 +222,14 @@ export default function CouncilAdminDashboard() {
     fetchData();
   }, [activeTab]);
 
+  // รีเซ็ตแก๊งที่เลือกถ้าแก๊งถูกยุบ/ไม่ active แล้ว
+  useEffect(() => {
+    if (selectedGangAbbr) {
+      const active = gangsList.some((g) => g.status === "approved" && g.abbreviation === selectedGangAbbr);
+      if (!active) setSelectedGangAbbr("");
+    }
+  }, [gangsList, selectedGangAbbr]);
+
   // โหลดรายการสวัสดิการปัจจุบัน (refetch เมื่อเปลี่ยนแก๊ง)
   useEffect(() => {
     const loadCurrentWelfare = async () => {
@@ -278,7 +286,9 @@ export default function CouncilAdminDashboard() {
       return filteredWelfareRequests.filter((r) => r.status === "รับไปแล้ว");
     }
     if (welfareStatusFilter === "pending") {
-      return filteredWelfareRequests.filter((r) => r.status !== "รับไปแล้ว" && r.status !== "เอาออกแล้ว");
+      return filteredWelfareRequests.filter(
+        (r) => r.status !== "รับไปแล้ว" && r.status !== "เอาออกแล้ว" && r.status !== "ออกแล้ว"
+      );
     }
     return filteredWelfareRequests;
   }, [filteredWelfareRequests, welfareStatusFilter]);
@@ -301,7 +311,7 @@ export default function CouncilAdminDashboard() {
     () => gangsList.filter((g) => g.status === "pending" || g.status === "รอยุบ"),
     [gangsList]
   );
-  const rejectedGangs = useMemo(
+  const disbandedGangs = useMemo(
     () => gangsList.filter((g) => g.status === "disbanded"),
     [gangsList]
   );
@@ -319,7 +329,7 @@ export default function CouncilAdminDashboard() {
   const pauseRequestPagination = usePagination(pauseRequests, 10);
   const leaveRequestPagination = usePagination(leaveRequests, 10);
   const uniformPagination = usePagination(filteredUniformFiles, 10, [uniformGangFilter]);
-  const rejectedGangPagination = usePagination(rejectedGangs, 10);
+  const disbandedGangPagination = usePagination(disbandedGangs, 10);
   const welfareByGangPagination = usePagination(welfareByGangList, 10, [selectedGangAbbr]);
   const currentWelfarePagination = usePagination(currentWelfare, 10);
   const welfareItemPagination = usePagination(welfareItems, 10);
@@ -381,7 +391,14 @@ export default function CouncilAdminDashboard() {
       setLoading(false);
       if (result.success) {
         showStatus({ type: "success", message: result.message });
-        setLeaveRequests((prev) => prev.map((r) => r.id === id ? { ...r, status: status } : r));
+        const [welfareResult, leaveResult] = await Promise.all([
+          getAllWelfareRequests(),
+          getLeaveRequests(),
+        ]);
+        if (welfareResult.success) setWelfareRequests(welfareResult.requests || []);
+        else setWelfareRequests([]);
+        if (leaveResult.success) setLeaveRequests(leaveResult.requests || []);
+        else setLeaveRequests([]);
       } else {
         showStatus({ type: "error", message: result.message });
       }
@@ -564,10 +581,14 @@ export default function CouncilAdminDashboard() {
       : await rejectDisbandRequest(id, reviewer);
 
     if (result.success) {
-      showStatus({ type: result.success ? "success" : "error", message: result.message });
+      showStatus({ type: "success", message: result.message });
+      const req = disbandRequests.find((r) => r.id === id);
       setDisbandRequests((prev) => prev.filter((r) => r.id !== id));
+      if (action === "approve" && req?.gang?.id) {
+        setGangsList((prev) => prev.map((g) => (g.id === req.gang.id ? { ...g, status: "disbanded" } : g)));
+      }
     } else {
-      showStatus({ type: result.success ? "success" : "error", message: result.message });
+      showStatus({ type: "error", message: result.message });
     }
   };
 
@@ -710,17 +731,20 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
     { id: "approve_leave", label: "ออก - ออกลอย", icon: "🚪" },
     { id: "approve_uniform", label: "จัดการไฟล์ชุด", icon: "👕" },
     { id: "gang_list", label: "รายชื่อแก๊งทั้งหมด", icon: "📋" },
-    { id: "rejected_gangs", label: "แก๊งไม่ได้รับอนุมัติ", icon: "❌" },
+    { id: "disbanded_gangs", label: "แก๊งถูกยุบ / ไม่ได้รับอนุมัติ", icon: "❌" },
     { id: "welfare_by_gang", label: "สวัสดิการตามแก๊ง", icon: "🎁" },
     { id: "current_welfare", label: "สวัสดิการปัจจุบัน", icon: "✅" },
     { id: "welfare_items", label: "จัดการรายการสวัสดิการ", icon: "📦" },
   ] as const;
 
+  const activeGangCount = gangsList.filter((g) => g.status !== "disbanded").length;
   const pendingGangCount = gangsList.filter((g) => g.status === "pending" || g.status === "รอยุบ").length;
   const pendingEditCount = editRequests.filter((r) => r.status === "pending").length;
   const pendingDisbandCount = disbandRequests.filter((r) => r.status === "pending").length;
   const pendingPauseCount = pauseRequests.length;
-  const pendingWelfareCount = welfareRequests.filter((r) => r.status !== "รับไปแล้ว" && r.status !== "เอาออกแล้ว").length;
+  const pendingWelfareCount = welfareRequests.filter(
+    (r) => r.status !== "รับไปแล้ว" && r.status !== "เอาออกแล้ว" && r.status !== "เอาสวัสดิการออกแล้ว" && r.status !== "ออกแล้ว"
+  ).length;
   const pendingUniformCount = uniformFiles.filter((f) => f.status !== "ลงแล้ว").length;
 
   const activeLabel = navItems.find((t) => t.id === activeTab)?.label || "";
@@ -807,7 +831,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 w-full">
             <div className="flex flex-col gap-1 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
               <span className="text-[10px] text-zinc-500 uppercase tracking-wider">แก๊งทั้งหมด</span>
-              <span className="text-2xl font-bold text-white">{gangsList.length}</span>
+              <span className="text-2xl font-bold text-white">{activeGangCount}</span>
             </div>
             <div className="flex flex-col gap-1 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
               <span className="text-[10px] text-zinc-500 uppercase tracking-wider">รออนุมัติแก๊ง</span>
@@ -1113,14 +1137,20 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                               <td className="px-6 py-4 text-zinc-400 truncate" title={formatWelfareDetails(req)}>{formatWelfareDetails(req)}</td>
                               <td className="px-6 py-4 text-zinc-400 text-center">{req.approvedBy || "-"}</td>
                               <td className="px-6 py-4 text-center">
-                                {req.status !== "รับไปแล้ว" && req.status !== "เอาออกแล้ว" ? (
+                                {req.status !== "รับไปแล้ว" && req.status !== "เอาออกแล้ว" && req.status !== "ออกแล้ว" ? (
                                   <div className="flex justify-center gap-2">
                                     <button onClick={() => handleApproveWelfare(req.id, "รับไปแล้ว")} className="px-4 py-1.5 bg-white/[0.08] hover:bg-white hover:text-black font-medium rounded-lg border border-white/[0.08] transition-all text-[11px] shadow-sm">อนุมัติแจก</button>
                                     <button onClick={() => handleApproveWelfare(req.id, "เอาออกแล้ว")} className="px-4 py-1.5 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-500 rounded-lg transition-all text-[11px]">ยกเลิก</button>
                                   </div>
                                 ) : (
-                                  <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${req.status === "รับไปแล้ว" ? "bg-white/[0.02] text-zinc-400 border-white/[0.06]" : "bg-transparent text-zinc-600 border-transparent"}`}>
-                                    {req.status === "รับไปแล้ว" ? "✓ ส่งมอบแล้ว" : "✕ ยกเลิกคำขอ"}
+                                  <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${
+                                    req.status === "รับไปแล้ว"
+                                      ? "bg-white/[0.02] text-zinc-400 border-white/[0.06]"
+                                      : req.status === "ออกแล้ว"
+                                        ? "bg-zinc-600/30 text-zinc-300 border-zinc-500/30"
+                                        : "bg-transparent text-zinc-600 border-transparent"
+                                  }`}>
+                                    {req.status === "รับไปแล้ว" ? "✓ ส่งมอบแล้ว" : req.status === "ออกแล้ว" ? "🚪 ออกแล้ว" : "✕ ยกเลิกคำขอ"}
                                   </span>
                                 )}
                               </td>
@@ -1207,18 +1237,16 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                                 </td>
                                 <td className="px-6 py-4 text-center">
                                   {req.status === "รอรับ" ? (
-                                    req.hasWelfare ? (
-                                      <span className="text-[10px] text-rose-400 font-medium">ต้องเอาสวัสดิการออก</span>
-                                    ) : (
-                                      <button
-                                        onClick={() => handleLeaveAction(req.id, "เอาสวัสดิการออกแล้ว")}
-                                        className="px-4 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg transition-all text-[11px]"
-                                      >
-                                        เอาสวัสดิการออกแล้ว
-                                      </button>
-                                    )
+                                    <button
+                                      onClick={() => handleLeaveAction(req.id, "เอาสวัสดิการออกแล้ว")}
+                                      className="px-4 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg transition-all text-[11px]"
+                                    >
+                                      เอาสวัสดิการออกแล้ว
+                                    </button>
                                   ) : (
-                                    <span className="text-zinc-500 text-xs">-</span>
+                                    <span className="text-zinc-500 text-xs">
+                                      {req.status === "เอาสวัสดิการออกแล้ว" ? "✓ เอาสวัสดิการออกแล้ว" : "-"}
+                                    </span>
                                   )}
                                 </td>
                               </tr>
@@ -1419,15 +1447,15 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                 </div>
               )}
 
-              {/* MENU 5: แก๊งไม่ได้รับอนุมัติ */}
-              {activeTab === "rejected_gangs" && (
+              {/* MENU 5: แก๊งถูกยุบ / ไม่ได้รับอนุมัติ */}
+              {activeTab === "disbanded_gangs" && (
                 <div className="flex flex-col w-full">
                   <div className="p-5 border-b border-white/[0.06] bg-white/[0.01]">
-                    <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">❌ แก๊งไม่ได้รับอนุมัติ</h2>
+                    <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">❌ แก๊งถูกยุบ / ไม่ได้รับอนุมัติ</h2>
                   </div>
                   <div className="overflow-x-auto p-4">
-                    {rejectedGangs.length === 0 ? (
-                      <div className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีแก๊งที่ถูกปฏิเสธ</div>
+                    {disbandedGangs.length === 0 ? (
+                      <div className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีแก๊งที่ถูกยุบ / ไม่ได้รับอนุมัติ</div>
                     ) : (
                       <table className="w-full text-xs text-left whitespace-nowrap border border-white/[0.04] rounded-xl">
                         <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/[0.06]">
@@ -1442,7 +1470,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                          {rejectedGangPagination.pagedItems.map((gang) => (
+                          {disbandedGangPagination.pagedItems.map((gang) => (
                               <tr key={gang.id} className="hover:bg-white/[0.01] transition-colors">
                                 <td className="px-6 py-4 font-mono text-zinc-600">#{gang.id}</td>
                                 <td className="px-6 py-4">
@@ -1468,7 +1496,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                                 </td>
                                 <td className="px-6 py-4 text-zinc-400">{gang.type || "Gang"}</td>
                                 <td className="px-6 py-4">
-                                  <span className="text-[10px] font-medium px-2.5 py-1 rounded-md bg-zinc-900/60 text-zinc-500 border border-white/[0.04]">ปฏิเสธ / ยุบ</span>
+                                  <span className="text-[10px] font-medium px-2.5 py-1 rounded-md bg-zinc-900/60 text-zinc-500 border border-white/[0.04]">ยุบ / ไม่ได้รับอนุมัติ</span>
                                 </td>
                                 <td className="px-6 py-4 text-center">
                                   <div className="flex justify-center gap-2">
@@ -1481,7 +1509,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         </tbody>
                       </table>
                     )}
-                    <PaginationControls page={rejectedGangPagination.page} setPage={rejectedGangPagination.setPage} totalPages={rejectedGangPagination.totalPages} />
+                    <PaginationControls page={disbandedGangPagination.page} setPage={disbandedGangPagination.setPage} totalPages={disbandedGangPagination.totalPages} />
                   </div>
                 </div>
               )}
@@ -1550,8 +1578,16 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                               <td className="px-6 py-4 text-zinc-300">{getWelfareReceiverName(req)}</td>
                               <td className="px-6 py-4 text-zinc-400 truncate" title={formatWelfareDetails(req)}>{formatWelfareDetails(req)}</td>
                               <td className="px-6 py-4">
-                                <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${req.status === 'รับไปแล้ว' ? 'bg-white/[0.08] text-white border-white/[0.1]' : req.status === 'เอาออกแล้ว' ? 'bg-transparent text-zinc-600 border-transparent' : 'bg-white/[0.01] text-zinc-500 border-white/[0.04]'}`}>
-                                  {req.status === 'รับไปแล้ว' ? '✓ ส่งมอบแล้ว' : req.status === 'เอาออกแล้ว' ? '✕ ยกเลิกคำขอ' : '⏳ รอรับ'}
+                                <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${
+                                  req.status === 'รับไปแล้ว'
+                                    ? 'bg-white/[0.08] text-white border-white/[0.1]'
+                                    : req.status === 'ออกแล้ว'
+                                      ? 'bg-zinc-600/30 text-zinc-300 border-zinc-500/30'
+                                      : req.status === 'เอาออกแล้ว'
+                                        ? 'bg-transparent text-zinc-600 border-transparent'
+                                        : 'bg-white/[0.01] text-zinc-500 border-white/[0.04]'
+                                }`}>
+                                  {req.status === 'รับไปแล้ว' ? '✓ ส่งมอบแล้ว' : req.status === 'ออกแล้ว' ? '🚪 ออกแล้ว' : req.status === 'เอาออกแล้ว' ? '✕ ยกเลิกคำขอ' : '⏳ รอรับ'}
                                 </span>
                               </td>
                               <td className="px-6 py-4 text-zinc-400">{req.approvedBy || "-"}</td>
