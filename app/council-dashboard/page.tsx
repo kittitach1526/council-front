@@ -28,6 +28,7 @@ import {
   deleteWelfareItem,
   getWelfareItemGangLimits,
   updateWelfareItemGangLimits,
+  getWelfareQuotas,
 } from "../register";
 import Modal from "../components/Modal";
 import GangEditModal from "../components/GangEditModal";
@@ -82,9 +83,10 @@ export default function CouncilAdminDashboard() {
   const [adminData, setAdminData] = useState<any>(null);
   const currentActor = adminData?.name || adminData?.username || "สภากลาง";
   const currentActorRole = adminData?.role || "council";
-  const [activeTab, setActiveTab] = useState<"approve_gang" | "approve_welfare" | "approve_trade" | "approve_leave" | "approve_uniform" | "approve_gang_edit" | "approve_disband" | "approve_pause" | "gang_list" | "disbanded_gangs" | "welfare_by_gang" | "current_welfare" | "welfare_items">("approve_gang");
+  const [activeTab, setActiveTab] = useState<"approve_gang" | "approve_welfare" | "approve_trade" | "approve_leave" | "approve_uniform" | "approve_gang_edit" | "approve_disband" | "approve_pause" | "gang_list" | "disbanded_gangs" | "welfare_by_gang" | "current_welfare" | "welfare_items" | "welfare_quotas">("approve_gang");
   const [loading, setLoading] = useState(false);
   const [selectedGangAbbr, setSelectedGangAbbr] = useState("");
+  const [currentWelfareItemFilter, setCurrentWelfareItemFilter] = useState("all");
   const [approveWelfareGangFilter, setApproveWelfareGangFilter] = useState("all");
   const [approveTradeGangFilter, setApproveTradeGangFilter] = useState("all");
   const [uniformGangFilter, setUniformGangFilter] = useState("all");
@@ -105,6 +107,15 @@ export default function CouncilAdminDashboard() {
   const [pauseRequests, setPauseRequests] = useState<any[]>([]);
   const [welfareItems, setWelfareItems] = useState<any[]>([]);
   const [currentWelfare, setCurrentWelfare] = useState<any[]>([]);
+  const [welfareQuotas, setWelfareQuotas] = useState<any[]>([]);
+  const [welfareQuotaSearch, setWelfareQuotaSearch] = useState("");
+  const filteredWelfareQuotas = useMemo(() => {
+    const q = welfareQuotaSearch.trim().toLowerCase();
+    if (!q) return welfareQuotas;
+    return welfareQuotas.filter(
+      (g) => g.fullName?.toLowerCase().includes(q) || g.abbreviation?.toLowerCase().includes(q)
+    );
+  }, [welfareQuotas, welfareQuotaSearch]);
   const [welfareItemName, setWelfareItemName] = useState("");
   const [welfareItemType, setWelfareItemType] = useState("");
   const [welfareItemGangLimit, setWelfareItemGangLimit] = useState("");
@@ -211,6 +222,15 @@ export default function CouncilAdminDashboard() {
             setWelfareItems(result.items || []);
           } else {
             setWelfareItems([]);
+          }
+        }
+
+        if (activeTab === "welfare_quotas") {
+          const result = await getWelfareQuotas();
+          if (result.success) {
+            setWelfareQuotas(result.gangs || []);
+          } else {
+            setWelfareQuotas([]);
           }
         }
 
@@ -357,7 +377,17 @@ export default function CouncilAdminDashboard() {
   const uniformPagination = usePagination(filteredUniformFiles, 10, [uniformGangFilter]);
   const disbandedGangPagination = usePagination(disbandedGangs, 10);
   const welfareByGangPagination = usePagination(welfareByGangList, 10, [selectedGangAbbr]);
-  const currentWelfarePagination = usePagination(currentWelfare, 10);
+  const currentWelfareItemOptions = useMemo(() => {
+    const names = Array.from(new Set(currentWelfare.map((r) => r.welfareItem).filter(Boolean)));
+    return ["all", ...names.sort()];
+  }, [currentWelfare]);
+
+  const filteredCurrentWelfare = useMemo(() => {
+    if (currentWelfareItemFilter === "all") return currentWelfare;
+    return currentWelfare.filter((r) => r.welfareItem === currentWelfareItemFilter);
+  }, [currentWelfare, currentWelfareItemFilter]);
+
+  const currentWelfarePagination = usePagination(filteredCurrentWelfare, 10, [selectedGangAbbr, currentWelfareItemFilter]);
   const welfareItemPagination = usePagination(welfareItems, 10);
 
   const filteredWelfareGangLimits = useMemo(() => {
@@ -762,6 +792,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
     { id: "welfare_by_gang", label: "สวัสดิการตามแก๊ง", icon: "🎁" },
     { id: "current_welfare", label: "สวัสดิการปัจจุบัน", icon: "✅" },
     { id: "welfare_items", label: "จัดการรายการสวัสดิการ", icon: "📦" },
+    { id: "welfare_quotas", label: "ดูโควต้าสวัสดิการ", icon: "📊" },
   ] as const;
 
   const activeGangCount = gangsList.filter((g) => g.status !== "disbanded").length;
@@ -1747,31 +1778,44 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                 <div className="flex flex-col w-full">
                   <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">✅ รายการสวัสดิการปัจจุบัน</h2>
-                    <select
-                      value={selectedGangAbbr}
-                      onChange={(e) => setSelectedGangAbbr(e.target.value)}
-                      className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-300 text-xs focus:outline-none"
-                    >
-                      <option value="">-- แสดงทุกแก๊ง --</option>
-                      {[
-                        { key: "Gang", label: "Gang" },
-                        { key: "Gangs-LD", label: "Gang-LD" },
-                        { key: "Family", label: "Family" },
-                      ].map(({ key, label }) => {
-                        const group = gangsList.filter(
-                          (g) => (g.type || "Gang") === key && g.status === "approved"
-                        );
-                        return (
-                          <optgroup key={key} label={label}>
-                            {group.map((gang) => (
-                              <option key={gang.abbreviation} value={gang.abbreviation}>
-                                {gang.fullName} [{gang.abbreviation}]
-                              </option>
-                            ))}
-                          </optgroup>
-                        );
-                      })}
-                    </select>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                      <select
+                        value={selectedGangAbbr}
+                        onChange={(e) => setSelectedGangAbbr(e.target.value)}
+                        className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-300 text-xs focus:outline-none"
+                      >
+                        <option value="">-- แสดงทุกแก๊ง --</option>
+                        {[
+                          { key: "Gang", label: "Gang" },
+                          { key: "Gangs-LD", label: "Gang-LD" },
+                          { key: "Family", label: "Family" },
+                        ].map(({ key, label }) => {
+                          const group = gangsList.filter(
+                            (g) => (g.type || "Gang") === key && g.status === "approved"
+                          );
+                          return (
+                            <optgroup key={key} label={label}>
+                              {group.map((gang) => (
+                                <option key={gang.abbreviation} value={gang.abbreviation}>
+                                  {gang.fullName} [{gang.abbreviation}]
+                                </option>
+                              ))}
+                            </optgroup>
+                          );
+                        })}
+                      </select>
+                      <select
+                        value={currentWelfareItemFilter}
+                        onChange={(e) => setCurrentWelfareItemFilter(e.target.value)}
+                        className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-300 text-xs focus:outline-none"
+                      >
+                        {currentWelfareItemOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name === "all" ? "— รายการสวัสดิการทั้งหมด —" : translateWelfareItem(name)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs text-left whitespace-nowrap">
@@ -2079,6 +2123,55 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       </table>
                     </div>
                     <PaginationControls page={welfareItemPagination.page} setPage={welfareItemPagination.setPage} totalPages={welfareItemPagination.totalPages} />
+                  </div>
+                </div>
+              )}
+
+              {activeTab === "welfare_quotas" && (
+                <div className="flex flex-col w-full">
+                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">📊 โควต้าสวัสดิการรายแก๊ง</h2>
+                    <input
+                      type="text"
+                      value={welfareQuotaSearch}
+                      onChange={(e) => setWelfareQuotaSearch(e.target.value)}
+                      placeholder="ค้นหาชื่อแก๊ง..."
+                      className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-64"
+                    />
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left whitespace-nowrap">
+                      <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/[0.06]">
+                        <tr>
+                          <th className="px-6 py-4">แก๊ง</th>
+                          <th className="px-6 py-4">รายการสวัสดิการ</th>
+                          <th className="px-6 py-4 text-center">รับแล้ว</th>
+                          <th className="px-6 py-4 text-center">จำนวนเต็ม</th>
+                          <th className="px-6 py-4 text-center">คงเหลือ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.04] text-zinc-300">
+                        {filteredWelfareQuotas.length === 0 ? (
+                          <tr><td colSpan={5} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่พบข้อมูลโควต้าสวัสดิการ</td></tr>
+                        ) : (
+                          filteredWelfareQuotas.flatMap((gang) =>
+                            gang.items.map((item: any, idx: number) => (
+                              <tr key={`${gang.id}-${item.itemId}`} className="hover:bg-white/[0.01] transition-colors">
+                                {idx === 0 ? (
+                                  <td className="px-6 py-4 font-medium text-white align-top" rowSpan={gang.items.length}>
+                                    {gang.fullName}<span className="block text-zinc-500 font-mono">[{gang.abbreviation}]</span>
+                                  </td>
+                                ) : null}
+                                <td className="px-6 py-4 text-zinc-300">{item.itemName}</td>
+                                <td className="px-6 py-4 text-center text-zinc-400">{item.used}</td>
+                                <td className="px-6 py-4 text-center text-zinc-400">{item.limit === null ? "ไม่จำกัด" : item.limit}</td>
+                                <td className="px-6 py-4 text-center text-zinc-400">{item.remaining === null ? "-" : item.remaining}</td>
+                              </tr>
+                            ))
+                          )
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}

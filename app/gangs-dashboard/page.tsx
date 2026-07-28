@@ -57,9 +57,9 @@ export default function GangDashboard() {
     approver: "",
     internalPhone: "",
     actionType: "ลงเพิ่ม" as "สวัสดิการ" | "แก้ไข" | "ลงเพิ่ม" | "ถูกชิงสี",
-    pieces: { Suit: false, Hood: false, Armor: false, Mod: false },
-    pieceNumbers: { Suit: "", Hood: "", Armor: "", Mod: "" },
-    oldPieceNumbers: { Suit: "", Hood: "", Armor: "", Mod: "" },
+    pieces: { Suit: false, Hood: false, Armor: false, "เสื้อยืด": false, Polo: false, Mod: false },
+    pieceNumbers: { Suit: "", Hood: "", Armor: "", "เสื้อยืด": "", Polo: "", Mod: "" },
+    oldPieceNumbers: { Suit: "", Hood: "", Armor: "", "เสื้อยืด": "", Polo: "", Mod: "" },
     colorName: "",
     hexColor: "#3b82f6",
     contractUrl: "",
@@ -264,9 +264,9 @@ export default function GangDashboard() {
     if (gangData.type === "Family") {
       setUniformForm((prev) => ({
         ...prev,
-        pieces: { Suit: false, Hood: true, Armor: false, Mod: false },
-        pieceNumbers: { Suit: "", Hood: "", Armor: "", Mod: "" },
-        oldPieceNumbers: { Suit: "", Hood: "", Armor: "", Mod: "" },
+        pieces: { Suit: false, Hood: true, Armor: false, "เสื้อยืด": false, Polo: false, Mod: false },
+        pieceNumbers: { Suit: "", Hood: "", Armor: "", "เสื้อยืด": "", Polo: "", Mod: "" },
+        oldPieceNumbers: { Suit: "", Hood: "", Armor: "", "เสื้อยืด": "", Polo: "", Mod: "" },
       }));
     }
   }, [gangData?.type]);
@@ -341,7 +341,7 @@ export default function GangDashboard() {
   }, [activeTab, gangData]);
 
   // Helpers สำหรับฟอร์มชุด
-  const pieceOptions = ["Suit", "Hood", "Armor", "Mod"] as const;
+  const pieceOptions = ["Suit", "Hood", "Armor", "เสื้อยืด", "Polo", "Mod"] as const;
   const isUniformActionNeedOld = (actionType: string) =>
     actionType === "แก้ไข" || actionType === "ถูกชิงสี";
   const isUniformActionNeedContract = (actionType: string) => actionType === "ถูกชิงสี";
@@ -351,10 +351,10 @@ export default function GangDashboard() {
     internalPhone: "",
     actionType: "ลงเพิ่ม" as "สวัสดิการ" | "แก้ไข" | "ลงเพิ่ม" | "ถูกชิงสี",
     pieces: gangData?.type === "Family"
-      ? { Suit: false, Hood: true, Armor: false, Mod: false }
-      : { Suit: false, Hood: false, Armor: false, Mod: false },
-    pieceNumbers: { Suit: "", Hood: "", Armor: "", Mod: "" },
-    oldPieceNumbers: { Suit: "", Hood: "", Armor: "", Mod: "" },
+      ? { Suit: false, Hood: true, Armor: false, "เสื้อยืด": false, Polo: false, Mod: false }
+      : { Suit: false, Hood: false, Armor: false, "เสื้อยืด": false, Polo: false, Mod: false },
+    pieceNumbers: { Suit: "", Hood: "", Armor: "", "เสื้อยืด": "", Polo: "", Mod: "" },
+    oldPieceNumbers: { Suit: "", Hood: "", Armor: "", "เสื้อยืด": "", Polo: "", Mod: "" },
     colorName: "",
     hexColor: "#3b82f6",
     contractUrl: "",
@@ -1710,7 +1710,7 @@ export default function GangDashboard() {
                   รายละเอียดชุด (Uniform Details)
                   {gangData.type === "Family" && <span className="text-teal-400 ml-2">สำหรับครอบครัว: Hood เท่านั้น</span>}
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
                   {pieceOptions.map((piece) => (
                     <label key={piece} className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${
                       uniformForm.pieces[piece]
@@ -1727,6 +1727,8 @@ export default function GangDashboard() {
                       {piece === "Suit" && "สูท (Suit)"}
                       {piece === "Hood" && "Hood"}
                       {piece === "Armor" && "เกราะ (Armor)"}
+                      {piece === "เสื้อยืด" && "เสื้อยืด"}
+                      {piece === "Polo" && "Polo"}
                       {piece === "Mod" && "ชุด MOD"}
                     </label>
                   ))}

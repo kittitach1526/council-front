@@ -1,0 +1,4 @@
+#dump shcema
+supabase db dump --linked -f shcema.sql
+#dump data
+supabase db dump --linked --data-only --use-copy -f data.sql
