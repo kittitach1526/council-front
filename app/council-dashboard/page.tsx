@@ -134,6 +134,7 @@ export default function CouncilAdminDashboard() {
   const [welfareGangLimitsLoading, setWelfareGangLimitsLoading] = useState(false);
   const [welfareGangFilter, setWelfareGangFilter] = useState("all");
   const [welfareGangSearch, setWelfareGangSearch] = useState("");
+  const [gangSearch, setGangSearch] = useState("");
 
   // 1. ตรวจสอบสิทธิ์ผู้ดูแลระบบสภากลาง
   useEffect(() => {
@@ -252,6 +253,16 @@ export default function CouncilAdminDashboard() {
     }
   }, [gangsList, selectedGangAbbr]);
 
+  // รีเซ็ตช่องค้นหาแก๊งเมื่อเปลี่ยนเมนู
+  useEffect(() => {
+    setGangSearch("");
+  }, [activeTab]);
+
+  // รีเซ็ตหน้ารายชื่อแก๊งเมื่อค้นหาเปลี่ยน
+  useEffect(() => {
+    setGangListPage({ Gang: 1, "Gangs-LD": 1, Family: 1 });
+  }, [gangSearch]);
+
   // โหลดรายการสวัสดิการปัจจุบัน (refetch เมื่อเปลี่ยนแก๊ง)
   useEffect(() => {
     const loadCurrentWelfare = async () => {
@@ -284,9 +295,20 @@ export default function CouncilAdminDashboard() {
   );
 
   const filteredWelfareRequests = useMemo(() => {
-    if (approveWelfareGangFilter === "all") return receiveWelfareRequests;
-    return receiveWelfareRequests.filter((r) => (r.gangName || "") === approveWelfareGangFilter);
-  }, [receiveWelfareRequests, approveWelfareGangFilter]);
+    let result = receiveWelfareRequests;
+    if (approveWelfareGangFilter !== "all") {
+      result = result.filter((r) => (r.gangName || "") === approveWelfareGangFilter);
+    }
+    const q = gangSearch.trim().toLowerCase();
+    if (q) {
+      result = result.filter(
+        (r) =>
+          (r.gangName || "").toLowerCase().includes(q) ||
+          (r.gangAbbreviation || r.gangAbbr || "").toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [receiveWelfareRequests, approveWelfareGangFilter, gangSearch]);
 
   const welfareGangOptions = useMemo(() => {
     const names = Array.from(new Set(gangsList.filter((g) => g.status !== "disbanded").map((g) => g.fullName).filter(Boolean)));
@@ -299,9 +321,16 @@ export default function CouncilAdminDashboard() {
   }, [gangsList]);
 
   const filteredUniformFiles = useMemo(() => {
-    if (uniformGangFilter === "all") return uniformFiles;
-    return uniformFiles.filter((f) => (f.gangName || "") === uniformGangFilter);
-  }, [uniformFiles, uniformGangFilter]);
+    let result = uniformFiles;
+    if (uniformGangFilter !== "all") {
+      result = result.filter((f) => (f.gangName || "") === uniformGangFilter);
+    }
+    const q = gangSearch.trim().toLowerCase();
+    if (q) {
+      result = result.filter((f) => (f.gangName || "").toLowerCase().includes(q));
+    }
+    return result;
+  }, [uniformFiles, uniformGangFilter, gangSearch]);
 
   const filteredWelfareByStatus = useMemo(() => {
     if (welfareStatusFilter === "approved") {
@@ -327,7 +356,7 @@ export default function CouncilAdminDashboard() {
 
   useEffect(() => {
     setWelfarePage(1);
-  }, [approveWelfareGangFilter, welfareStatusFilter]);
+  }, [approveWelfareGangFilter, welfareStatusFilter, gangSearch]);
 
   const tradeRequests = useMemo(
     () => welfareRequests.filter((r) => r.requestType === "trade"),
@@ -335,9 +364,20 @@ export default function CouncilAdminDashboard() {
   );
 
   const filteredTradeRequests = useMemo(() => {
-    if (approveTradeGangFilter === "all") return tradeRequests;
-    return tradeRequests.filter((r) => (r.gangName || "") === approveTradeGangFilter);
-  }, [tradeRequests, approveTradeGangFilter]);
+    let result = tradeRequests;
+    if (approveTradeGangFilter !== "all") {
+      result = result.filter((r) => (r.gangName || "") === approveTradeGangFilter);
+    }
+    const q = gangSearch.trim().toLowerCase();
+    if (q) {
+      result = result.filter(
+        (r) =>
+          (r.gangName || "").toLowerCase().includes(q) ||
+          (r.gangAbbreviation || r.gangAbbr || "").toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [tradeRequests, approveTradeGangFilter, gangSearch]);
 
   const filteredTradeByStatus = useMemo(() => {
     if (tradeStatusFilter === "approved") {
@@ -351,16 +391,43 @@ export default function CouncilAdminDashboard() {
     return filteredTradeRequests;
   }, [filteredTradeRequests, tradeStatusFilter]);
 
-  const tradePagination = usePagination(filteredTradeByStatus, 10, [approveTradeGangFilter, tradeStatusFilter]);
+  const tradePagination = usePagination(filteredTradeByStatus, 10, [approveTradeGangFilter, tradeStatusFilter, gangSearch]);
 
   const pendingGangs = useMemo(
-    () => gangsList.filter((g) => g.status === "pending" || g.status === "รอยุบ"),
-    [gangsList]
+    () =>
+      gangsList
+        .filter((g) => g.status === "pending" || g.status === "รอยุบ")
+        .filter((g) => {
+          const q = gangSearch.trim().toLowerCase();
+          if (!q) return true;
+          return ((g.fullName || "") + " " + (g.abbreviation || "")).toLowerCase().includes(q);
+        }),
+    [gangsList, gangSearch]
   );
   const disbandedGangs = useMemo(
     () => gangsList.filter((g) => g.status === "disbanded"),
     [gangsList]
   );
+
+  const filteredGangsList = useMemo(() => {
+    const q = gangSearch.trim().toLowerCase();
+    if (!q) return gangsList;
+    return gangsList.filter(
+      (g) =>
+        (g.fullName || "").toLowerCase().includes(q) ||
+        (g.abbreviation || "").toLowerCase().includes(q)
+    );
+  }, [gangsList, gangSearch]);
+
+  const filteredDisbandedGangs = useMemo(() => {
+    const q = gangSearch.trim().toLowerCase();
+    if (!q) return disbandedGangs;
+    return disbandedGangs.filter(
+      (g) =>
+        (g.fullName || "").toLowerCase().includes(q) ||
+        (g.abbreviation || "").toLowerCase().includes(q)
+    );
+  }, [disbandedGangs, gangSearch]);
   const welfareByGangList = useMemo(
     () =>
       selectedGangAbbr
@@ -369,13 +436,55 @@ export default function CouncilAdminDashboard() {
     [welfareRequests, selectedGangAbbr]
   );
 
-  const pendingGangPagination = usePagination(pendingGangs, 10);
-  const editRequestPagination = usePagination(editRequests, 10);
-  const disbandRequestPagination = usePagination(disbandRequests, 10);
-  const pauseRequestPagination = usePagination(pauseRequests, 10);
-  const leaveRequestPagination = usePagination(leaveRequests, 10);
-  const uniformPagination = usePagination(filteredUniformFiles, 10, [uniformGangFilter]);
-  const disbandedGangPagination = usePagination(disbandedGangs, 10);
+  const pendingGangPagination = usePagination(pendingGangs, 10, [gangSearch]);
+  const filteredEditRequests = useMemo(() => {
+    const q = gangSearch.trim().toLowerCase();
+    if (!q) return editRequests;
+    return editRequests.filter(
+      (r) =>
+        (r.gang?.fullName || "").toLowerCase().includes(q) ||
+        (r.gang?.abbreviation || "").toLowerCase().includes(q) ||
+        (r.fullName || "").toLowerCase().includes(q) ||
+        (r.abbreviation || "").toLowerCase().includes(q)
+    );
+  }, [editRequests, gangSearch]);
+
+  const editRequestPagination = usePagination(filteredEditRequests, 10, [gangSearch]);
+  const filteredDisbandRequests = useMemo(() => {
+    const q = gangSearch.trim().toLowerCase();
+    if (!q) return disbandRequests;
+    return disbandRequests.filter(
+      (r) =>
+        (r.gang?.fullName || "").toLowerCase().includes(q) ||
+        (r.gang?.abbreviation || "").toLowerCase().includes(q)
+    );
+  }, [disbandRequests, gangSearch]);
+
+  const disbandRequestPagination = usePagination(filteredDisbandRequests, 10, [gangSearch]);
+  const filteredPauseRequests = useMemo(() => {
+    const q = gangSearch.trim().toLowerCase();
+    if (!q) return pauseRequests;
+    return pauseRequests.filter(
+      (r) =>
+        (r.gang?.fullName || "").toLowerCase().includes(q) ||
+        (r.gang?.abbreviation || "").toLowerCase().includes(q)
+    );
+  }, [pauseRequests, gangSearch]);
+
+  const pauseRequestPagination = usePagination(filteredPauseRequests, 10, [gangSearch]);
+  const filteredLeaveRequests = useMemo(() => {
+    const q = gangSearch.trim().toLowerCase();
+    if (!q) return leaveRequests;
+    return leaveRequests.filter(
+      (r) =>
+        (r.gangName || "").toLowerCase().includes(q) ||
+        (r.gangAbbreviation || r.gangAbbr || "").toLowerCase().includes(q)
+    );
+  }, [leaveRequests, gangSearch]);
+
+  const leaveRequestPagination = usePagination(filteredLeaveRequests, 10, [gangSearch]);
+  const uniformPagination = usePagination(filteredUniformFiles, 10, [uniformGangFilter, gangSearch]);
+  const disbandedGangPagination = usePagination(filteredDisbandedGangs, 10, [gangSearch]);
   const welfareByGangPagination = usePagination(welfareByGangList, 10, [selectedGangAbbr]);
   const currentWelfareItemOptions = useMemo(() => {
     const names = Array.from(new Set(currentWelfare.map((r) => r.welfareItem).filter(Boolean)));
@@ -383,11 +492,25 @@ export default function CouncilAdminDashboard() {
   }, [currentWelfare]);
 
   const filteredCurrentWelfare = useMemo(() => {
-    if (currentWelfareItemFilter === "all") return currentWelfare;
-    return currentWelfare.filter((r) => r.welfareItem === currentWelfareItemFilter);
-  }, [currentWelfare, currentWelfareItemFilter]);
+    let result = currentWelfare;
+    if (selectedGangAbbr) {
+      result = result.filter((r) => r.gangAbbreviation === selectedGangAbbr);
+    }
+    if (currentWelfareItemFilter !== "all") {
+      result = result.filter((r) => r.welfareItem === currentWelfareItemFilter);
+    }
+    const q = gangSearch.trim().toLowerCase();
+    if (q) {
+      result = result.filter(
+        (r) =>
+          (r.gangName || "").toLowerCase().includes(q) ||
+          (r.gangAbbreviation || "").toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [currentWelfare, selectedGangAbbr, currentWelfareItemFilter, gangSearch]);
 
-  const currentWelfarePagination = usePagination(filteredCurrentWelfare, 10, [selectedGangAbbr, currentWelfareItemFilter]);
+  const currentWelfarePagination = usePagination(filteredCurrentWelfare, 10, [selectedGangAbbr, currentWelfareItemFilter, gangSearch]);
   const welfareItemPagination = usePagination(welfareItems, 10);
 
   const filteredWelfareGangLimits = useMemo(() => {
@@ -931,8 +1054,15 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
               {/* MENU 1: ยืนยันแก๊ง */}
               {activeTab === "approve_gang" && (
                 <div className="flex flex-col w-full">
-                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01]">
+                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">🛡️ คำขอเปิดสิทธิ์ภาคีแก๊ง</h2>
+                    <input
+                      type="text"
+                      value={gangSearch}
+                      onChange={(e) => setGangSearch(e.target.value)}
+                      placeholder="ค้นหาชื่อแก๊ง..."
+                      className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-64"
+                    />
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs text-left whitespace-nowrap">
@@ -972,8 +1102,15 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
               {/* MENU 2: อนุมัติการแก้ไขแก๊ง */}
               {activeTab === "approve_gang_edit" && (
                 <div className="flex flex-col w-full">
-                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01]">
+                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">✏️ คำขอแก้ไขข้อมูลแก๊ง</h2>
+                    <input
+                      type="text"
+                      value={gangSearch}
+                      onChange={(e) => setGangSearch(e.target.value)}
+                      placeholder="ค้นหาชื่อแก๊ง..."
+                      className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-64"
+                    />
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs text-left whitespace-nowrap">
@@ -1034,8 +1171,15 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
               {/* MENU 3: อนุมัติยุบแก๊ง */}
               {activeTab === "approve_disband" && (
                 <div className="flex flex-col w-full">
-                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01]">
+                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">⚠️ คำขอยุบแก๊ง</h2>
+                    <input
+                      type="text"
+                      value={gangSearch}
+                      onChange={(e) => setGangSearch(e.target.value)}
+                      placeholder="ค้นหาชื่อแก๊ง..."
+                      className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-64"
+                    />
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs text-left whitespace-nowrap">
@@ -1073,8 +1217,15 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
               {/* MENU 4: อนุมัติพักแก๊ง */}
               {activeTab === "approve_pause" && (
                 <div className="flex flex-col w-full">
-                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01]">
+                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">⏸️ คำขอพักแก๊ง</h2>
+                    <input
+                      type="text"
+                      value={gangSearch}
+                      onChange={(e) => setGangSearch(e.target.value)}
+                      placeholder="ค้นหาชื่อแก๊ง..."
+                      className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-64"
+                    />
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs text-left whitespace-nowrap">
@@ -1159,6 +1310,13 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                           ))}
                         </select>
                       </label>
+                      <input
+                        type="text"
+                        value={gangSearch}
+                        onChange={(e) => setGangSearch(e.target.value)}
+                        placeholder="ค้นหาชื่อแก๊ง..."
+                        className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-48"
+                      />
                       <span className="text-xs text-zinc-500">แสดง {pagedWelfareRequests.length} / {filteredWelfareByStatus.length} รายการ</span>
                     </div>
                   </div>
@@ -1272,6 +1430,13 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                           ))}
                         </select>
                       </label>
+                      <input
+                        type="text"
+                        value={gangSearch}
+                        onChange={(e) => setGangSearch(e.target.value)}
+                        placeholder="ค้นหาชื่อแก๊ง..."
+                        className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-48"
+                      />
                       <span className="text-xs text-zinc-500">แสดง {tradePagination.pagedItems.length} / {filteredTradeByStatus.length} รายการ</span>
                     </div>
                   </div>
@@ -1358,8 +1523,15 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
               {/* MENU 5: คำขอออกลอย */}
               {activeTab === "approve_leave" && (
                 <div className="flex flex-col w-full">
-                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01]">
+                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">🚪 คำขอออก - ออกลอย</h2>
+                    <input
+                      type="text"
+                      value={gangSearch}
+                      onChange={(e) => setGangSearch(e.target.value)}
+                      placeholder="ค้นหาชื่อแก๊ง..."
+                      className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-64"
+                    />
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs text-left whitespace-nowrap">
@@ -1449,6 +1621,13 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                           ))}
                         </select>
                       </label>
+                      <input
+                        type="text"
+                        value={gangSearch}
+                        onChange={(e) => setGangSearch(e.target.value)}
+                        placeholder="ค้นหาชื่อแก๊ง..."
+                        className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-48"
+                      />
                       <span className="text-xs text-zinc-500">แสดง {filteredUniformFiles.length} รายการ</span>
                     </div>
                   </div>
@@ -1517,8 +1696,15 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
               {/* MENU 4: รายชื่อแก๊ง */}
               {activeTab === "gang_list" && (
                 <div className="flex flex-col w-full">
-                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01]">
+                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">📋 รายชื่อแก๊งทั้งหมด</h2>
+                    <input
+                      type="text"
+                      value={gangSearch}
+                      onChange={(e) => setGangSearch(e.target.value)}
+                      placeholder="ค้นหาชื่อแก๊ง..."
+                      className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-64"
+                    />
                   </div>
                   <div className="flex flex-col gap-6 p-4">
                     {[
@@ -1526,7 +1712,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       { key: "Gangs-LD", label: "Gang-LD" },
                       { key: "Family", label: "Family" },
                     ].map(({ key, label }) => {
-                      const list = gangsList.filter(
+                      const list = filteredGangsList.filter(
                         (g) => (g.type || "Gang") === key && g.status !== "disbanded"
                       );
                       const page = gangListPage[key] || 1;
@@ -1621,8 +1807,15 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
               {/* MENU 5: แก๊งถูกยุบ / ไม่ได้รับอนุมัติ */}
               {activeTab === "disbanded_gangs" && (
                 <div className="flex flex-col w-full">
-                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01]">
+                  <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">❌ แก๊งถูกยุบ / ไม่ได้รับอนุมัติ</h2>
+                    <input
+                      type="text"
+                      value={gangSearch}
+                      onChange={(e) => setGangSearch(e.target.value)}
+                      placeholder="ค้นหาชื่อแก๊ง..."
+                      className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-64"
+                    />
                   </div>
                   <div className="overflow-x-auto p-4">
                     {disbandedGangs.length === 0 ? (
@@ -1690,6 +1883,13 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                 <div className="flex flex-col w-full">
                   <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">🎁 สวัสดิการตามแก๊ง</h2>
+                    <input
+                      type="text"
+                      value={gangSearch}
+                      onChange={(e) => setGangSearch(e.target.value)}
+                      placeholder="ค้นหาชื่อแก๊ง..."
+                      className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-48"
+                    />
                     <select
                       value={selectedGangAbbr}
                       onChange={(e) => setSelectedGangAbbr(e.target.value)}
@@ -1701,7 +1901,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         { key: "Gangs-LD", label: "Gang-LD" },
                         { key: "Family", label: "Family" },
                       ].map(({ key, label }) => {
-                        const group = gangsList.filter(
+                        const group = filteredGangsList.filter(
                           (g) => (g.type || "Gang") === key && g.status === "approved"
                         );
                         return (
@@ -1779,6 +1979,13 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                   <div className="p-5 border-b border-white/[0.06] bg-white/[0.01] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">✅ รายการสวัสดิการปัจจุบัน</h2>
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                      <input
+                        type="text"
+                        value={gangSearch}
+                        onChange={(e) => setGangSearch(e.target.value)}
+                        placeholder="ค้นหาชื่อแก๊ง..."
+                        className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-48"
+                      />
                       <select
                         value={selectedGangAbbr}
                         onChange={(e) => setSelectedGangAbbr(e.target.value)}
@@ -1790,7 +1997,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                           { key: "Gangs-LD", label: "Gang-LD" },
                           { key: "Family", label: "Family" },
                         ].map(({ key, label }) => {
-                          const group = gangsList.filter(
+                          const group = filteredGangsList.filter(
                             (g) => (g.type || "Gang") === key && g.status === "approved"
                           );
                           return (
