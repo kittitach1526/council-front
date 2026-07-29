@@ -1,6 +1,6 @@
 "use server";
 
-const API_BASE_URL = process.env.API_BASE_URL || "http://127.0.0.1:4000";
+const API_BASE_URL = process.env.API_BASE_URL || "https://api-council-serverkz.sphx-dev.online";
 
 const ROOT_USERNAME = "root";
 const ROOT_PASSWORD = "p@ssw0rd";
