@@ -529,10 +529,13 @@ export default function AdminDashboard() {
                           <td className="px-6 py-4 text-zinc-300">{gangTypeByName[file.gangName] || "-"}</td>
                           <td className="px-6 py-4 text-zinc-400">{file.uniformType}</td>
                           <td className="px-6 py-4">
-                            {details.colorName ? (
+                            {details.colorName || details.hexColor ? (
                               <div className="flex items-center gap-2">
                                 <span className="w-5 h-5 rounded-md border border-white/10 inline-block" style={{ backgroundColor: details.hexColor || "#3b82f6" }} />
-                                <span className="text-zinc-300">{details.colorName}</span>
+                                <div className="flex flex-col leading-tight">
+                                  <span className="text-zinc-300">{details.colorName || "-"}</span>
+                                  <span className="text-[10px] font-mono text-zinc-400">{details.hexColor || "-"}</span>
+                                </div>
                               </div>
                             ) : (
                               <span className="text-zinc-500">-</span>

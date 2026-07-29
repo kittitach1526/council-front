@@ -1632,6 +1632,13 @@ export default function GangDashboard() {
               <div className="flex flex-col gap-2 p-4 rounded-xl border border-white/10 bg-white/[0.02]">
                 <label className="text-sm font-medium text-zinc-200">ตัวอย่างชุด</label>
                 <Image
+                  src="/uniform.png"
+                  alt="ตัวอย่างชุด uniform"
+                  width={1200}
+                  height={675}
+                  className="w-full h-auto rounded-xl border border-white/10 object-cover"
+                />
+                <Image
                   src="/ex.jpg"
                   alt="ตัวอย่างชุด"
                   width={1200}
