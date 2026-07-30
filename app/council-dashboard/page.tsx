@@ -111,11 +111,22 @@ export default function CouncilAdminDashboard() {
   const [welfareQuotaSearch, setWelfareQuotaSearch] = useState("");
   const filteredWelfareQuotas = useMemo(() => {
     const q = welfareQuotaSearch.trim().toLowerCase();
-    if (!q) return welfareQuotas;
-    return welfareQuotas.filter(
+    const counts: Record<string, number> = {};
+    for (const r of welfareRequests) {
+      if (r.requestType === "trade") {
+        const key = r.gangAbbreviation || r.gangName || "";
+        if (key) counts[key] = (counts[key] || 0) + 1;
+      }
+    }
+    const base = welfareQuotas.map((g) => ({
+      ...g,
+      tradeCount: counts[g.abbreviation] || counts[g.fullName] || 0,
+    }));
+    if (!q) return base;
+    return base.filter(
       (g) => g.fullName?.toLowerCase().includes(q) || g.abbreviation?.toLowerCase().includes(q)
     );
-  }, [welfareQuotas, welfareQuotaSearch]);
+  }, [welfareQuotas, welfareRequests, welfareQuotaSearch]);
   const [welfareItemName, setWelfareItemName] = useState("");
   const [welfareItemType, setWelfareItemType] = useState("");
   const [welfareItemGangLimit, setWelfareItemGangLimit] = useState("");
@@ -163,7 +174,7 @@ export default function CouncilAdminDashboard() {
           }
         }
 
-        if (activeTab === "approve_welfare" || activeTab === "approve_trade" || activeTab === "welfare_by_gang") {
+        if (activeTab === "approve_welfare" || activeTab === "approve_trade" || activeTab === "welfare_by_gang" || activeTab === "welfare_quotas") {
           const result = await getAllWelfareRequests();
           if (result.success) {
             setWelfareRequests(result.requests || []);
@@ -343,16 +354,6 @@ export default function CouncilAdminDashboard() {
     }
     return filteredWelfareRequests;
   }, [filteredWelfareRequests, welfareStatusFilter]);
-
-  const welfareTotalPages = useMemo(
-    () => Math.max(1, Math.ceil(filteredWelfareByStatus.length / WELFARE_PER_PAGE)),
-    [filteredWelfareByStatus.length]
-  );
-
-  const pagedWelfareRequests = useMemo(() => {
-    const start = (welfarePage - 1) * WELFARE_PER_PAGE;
-    return filteredWelfareByStatus.slice(start, start + WELFARE_PER_PAGE);
-  }, [filteredWelfareByStatus, welfarePage]);
 
   useEffect(() => {
     setWelfarePage(1);
@@ -557,6 +558,31 @@ export default function CouncilAdminDashboard() {
       } else {
         showStatus({ type: result.success ? "success" : "error", message: result.message });
       }
+    } catch (error) {
+      setLoading(false);
+      showStatus({ type: "error", message: "❌ เกิดข้อผิดพลาดในการอนุมัติสวัสดิการ" });
+    }
+  };
+
+  // อนุมัติ/ยกเลิกคำขอสวัสดิการที่ถูกรวมเป็นแถวเดียว (คนเดียวกันขอหลายรายการ) พร้อมกันทีเดียว
+  const handleApproveWelfareBatch = async (ids: number[], status: "รับไปแล้ว" | "เอาออกแล้ว") => {
+    try {
+      setLoading(true);
+      const results = await Promise.all(
+        ids.map((id) => updateWelfareStatus(id, status, currentActor, currentActorRole))
+      );
+      setLoading(false);
+      const allSuccess = results.every((r) => r.success);
+      const approvedBy = results.find((r) => r.success)?.approvedBy || currentActor;
+      if (allSuccess) {
+        showStatus({ type: "success", message: `✨ อัปเดตคำขอสวัสดิการ ${ids.length} รายการเป็น [${status}] เรียบร้อย` });
+      } else {
+        showStatus({ type: "error", message: "⚠️ มีบางรายการอัปเดตไม่สำเร็จ กรุณาตรวจสอบอีกครั้ง" });
+      }
+      const idSet = new Set(ids);
+      setWelfareRequests((prev) =>
+        prev.map((r) => (idSet.has(r.id) ? { ...r, status: status, approvedBy } : r))
+      );
     } catch (error) {
       setLoading(false);
       showStatus({ type: "error", message: "❌ เกิดข้อผิดพลาดในการอนุมัติสวัสดิการ" });
@@ -840,6 +866,78 @@ const getWelfareReceiverName = (req: any) => {
   if (type === "leave") return details.leaveName || "-";
   return "-";
 };
+
+const getWelfareItemsDisplay = (req: any) => {
+  const details = parseDetails(req.details);
+  const rawItems = Array.isArray(details.items) && details.items.length > 0 ? details.items : [req.welfareItem];
+  const labels = rawItems
+    .map((it: any) => {
+      const name = typeof it === "string" ? it : it?.name || req.welfareItem;
+      return name ? translateWelfareItem(name) : "";
+    })
+    .filter(Boolean);
+  if (labels.length === 0) return translateWelfareItem(req.welfareItem);
+  return labels.join(" + ");
+};
+
+// รวมคำขอสวัสดิการของคนเดียวกัน (แก๊ง/ผู้ยื่น/ผู้รับ/สถานะเดียวกัน) ให้เป็นแถวเดียว
+// เผื่อกรณีระบบสร้างคำขอแยกรายการต่อสวัสดิการแต่ละอย่าง
+const groupWelfareRequestsByPerson = (requests: any[]) => {
+  const map = new Map<string, any>();
+  const order: string[] = [];
+  for (const req of requests) {
+    const receiver = getWelfareReceiverName(req);
+    const key = [req.gangName, req.discordId, req.requestName, receiver, req.status].join("|");
+    const existing = map.get(key);
+    if (existing) {
+      existing.ids.push(req.id);
+      existing.rawRequests.push(req);
+    } else {
+      map.set(key, { ...req, ids: [req.id], rawRequests: [req] });
+      order.push(key);
+    }
+  }
+  return order.map((key) => map.get(key));
+};
+
+const getGroupWelfareItemsDisplay = (group: any) => {
+  const list = Array.isArray(group.rawRequests) ? group.rawRequests : [group];
+  const labels: string[] = [];
+  for (const req of list) {
+    const details = parseDetails(req.details);
+    const rawItems = Array.isArray(details.items) && details.items.length > 0 ? details.items : [req.welfareItem];
+    for (const it of rawItems) {
+      const name = typeof it === "string" ? it : it?.name || req.welfareItem;
+      if (!name) continue;
+      const label = translateWelfareItem(name);
+      if (label && !labels.includes(label)) labels.push(label);
+    }
+  }
+  if (labels.length === 0) return translateWelfareItem(group.welfareItem);
+  return labels.join(" + ");
+};
+
+const getGroupWelfareDetailsDisplay = (group: any) => {
+  const list = Array.isArray(group.rawRequests) ? group.rawRequests : [group];
+  const texts = list.map((req: any) => formatWelfareDetails(req)).filter(Boolean);
+  const unique = Array.from(new Set(texts));
+  return unique.join(" + ");
+};
+
+  const groupedWelfareByStatus = useMemo(
+    () => groupWelfareRequestsByPerson(filteredWelfareByStatus),
+    [filteredWelfareByStatus]
+  );
+
+  const welfareTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(groupedWelfareByStatus.length / WELFARE_PER_PAGE)),
+    [groupedWelfareByStatus.length]
+  );
+
+  const pagedWelfareRequests = useMemo(() => {
+    const start = (welfarePage - 1) * WELFARE_PER_PAGE;
+    return groupedWelfareByStatus.slice(start, start + WELFARE_PER_PAGE);
+  }, [groupedWelfareByStatus, welfarePage]);
 
 const formatUniformDetails = (file: any) => {
   const details = parseDetails(file.details);
@@ -1317,7 +1415,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         placeholder="ค้นหาชื่อแก๊ง..."
                         className="h-9 px-3 rounded-lg bg-zinc-950 border border-white/[0.06] text-zinc-200 text-xs focus:outline-none w-full sm:w-48"
                       />
-                      <span className="text-xs text-zinc-500">แสดง {pagedWelfareRequests.length} / {filteredWelfareByStatus.length} รายการ</span>
+                      <span className="text-xs text-zinc-500">แสดง {pagedWelfareRequests.length} / {groupedWelfareByStatus.length} รายการ</span>
                     </div>
                   </div>
                   <div className="overflow-x-auto">
@@ -1339,7 +1437,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                           <tr><td colSpan={8} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีคำขอสวัสดิการค้างในระบบ</td></tr>
                         ) : (
                           pagedWelfareRequests.map((req) => (
-                            <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
+                            <tr key={req.ids.join(",")} className="hover:bg-white/[0.01] transition-colors">
                               <td className="px-6 py-4 font-semibold text-white">{req.gangName} <span className="text-zinc-500">[{req.gangAbbreviation || req.gangAbbr}]</span></td>
                               <td className="px-6 py-4">
                                 <span className="block text-zinc-300 font-medium">{req.requestName}</span>
@@ -1348,15 +1446,15 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                                 {(() => { const d = parseDetails(req.details); return d.requesterPhone ? <span className="text-[10px] text-zinc-400 block">📞 {d.requesterPhone}</span> : null; })()}
                               </td>
                               <td className="px-6 py-4 text-zinc-400">{welfareTypeLabel(req)}</td>
-                              <td className="px-6 py-4 text-zinc-400">{translateWelfareItem(req.welfareItem)}</td>
+                              <td className="px-6 py-4 text-zinc-400">{getGroupWelfareItemsDisplay(req)}</td>
                               <td className="px-6 py-4 text-zinc-300">{getWelfareReceiverName(req)}</td>
-                              <td className="px-6 py-4 text-zinc-400 truncate" title={formatWelfareDetails(req)}>{formatWelfareDetails(req)}</td>
+                              <td className="px-6 py-4 text-zinc-400 truncate" title={getGroupWelfareDetailsDisplay(req)}>{getGroupWelfareDetailsDisplay(req)}</td>
                               <td className="px-6 py-4 text-zinc-400 text-center">{req.approvedBy || "-"}</td>
                               <td className="px-6 py-4 text-center">
                                 {req.status !== "รับไปแล้ว" && req.status !== "เอาออกแล้ว" && req.status !== "ออกแล้ว" ? (
                                   <div className="flex justify-center gap-2">
-                                    <button onClick={() => handleApproveWelfare(req.id, "รับไปแล้ว")} className="px-4 py-1.5 bg-white/[0.08] hover:bg-white hover:text-black font-medium rounded-lg border border-white/[0.08] transition-all text-[11px] shadow-sm">อนุมัติแจก</button>
-                                    <button onClick={() => handleApproveWelfare(req.id, "เอาออกแล้ว")} className="px-4 py-1.5 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-500 rounded-lg transition-all text-[11px]">ยกเลิก</button>
+                                    <button onClick={() => handleApproveWelfareBatch(req.ids, "รับไปแล้ว")} className="px-4 py-1.5 bg-white/[0.08] hover:bg-white hover:text-black font-medium rounded-lg border border-white/[0.08] transition-all text-[11px] shadow-sm">อนุมัติแจก</button>
+                                    <button onClick={() => handleApproveWelfareBatch(req.ids, "เอาออกแล้ว")} className="px-4 py-1.5 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-500 rounded-lg transition-all text-[11px]">ยกเลิก</button>
                                   </div>
                                 ) : (
                                   <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${
@@ -1376,7 +1474,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                       </tbody>
                     </table>
                   </div>
-                  {filteredWelfareByStatus.length > WELFARE_PER_PAGE && (
+                  {groupedWelfareByStatus.length > WELFARE_PER_PAGE && (
                     <div className="p-4 border-t border-white/[0.06] bg-white/[0.01] flex items-center justify-between">
                       <span className="text-xs text-zinc-500">หน้า {welfarePage} / {welfareTotalPages}</span>
                       <div className="flex items-center gap-2">
@@ -2353,13 +2451,14 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                           <th className="px-6 py-4">แก๊ง</th>
                           <th className="px-6 py-4">รายการสวัสดิการ</th>
                           <th className="px-6 py-4 text-center">รับแล้ว</th>
+                          <th className="px-6 py-4 text-center">เทรด</th>
                           <th className="px-6 py-4 text-center">จำนวนเต็ม</th>
                           <th className="px-6 py-4 text-center">คงเหลือ</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
                         {filteredWelfareQuotas.length === 0 ? (
-                          <tr><td colSpan={5} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่พบข้อมูลโควต้าสวัสดิการ</td></tr>
+                          <tr><td colSpan={6} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่พบข้อมูลโควต้าสวัสดิการ</td></tr>
                         ) : (
                           filteredWelfareQuotas.flatMap((gang) =>
                             gang.items.map((item: any, idx: number) => (
@@ -2371,6 +2470,11 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                                 ) : null}
                                 <td className="px-6 py-4 text-zinc-300">{item.itemName}</td>
                                 <td className="px-6 py-4 text-center text-zinc-400">{item.used}</td>
+                                {idx === 0 ? (
+                                  <td className="px-6 py-4 text-center text-zinc-400 align-top" rowSpan={gang.items.length}>
+                                    {gang.tradeCount}
+                                  </td>
+                                ) : null}
                                 <td className="px-6 py-4 text-center text-zinc-400">{item.limit === null ? "ไม่จำกัด" : item.limit}</td>
                                 <td className="px-6 py-4 text-center text-zinc-400">{item.remaining === null ? "-" : item.remaining}</td>
                               </tr>

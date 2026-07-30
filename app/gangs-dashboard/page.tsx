@@ -646,9 +646,23 @@ export default function GangDashboard() {
     return "-";
   };
 
-  const WelfareRequestsTable = ({ requests, title, emptyText }: { requests: any[]; title: string; emptyText: string }) => (
+  const WELFARE_TABLE_PER_PAGE = 10;
+
+  const WelfareRequestsTable = ({ requests, title, emptyText }: { requests: any[]; title: string; emptyText: string }) => {
+    const [page, setPage] = useState(1);
+    const totalPages = Math.max(1, Math.ceil(requests.length / WELFARE_TABLE_PER_PAGE));
+    const currentPage = Math.min(page, totalPages);
+    const pagedRequests = useMemo(() => {
+      const start = (currentPage - 1) * WELFARE_TABLE_PER_PAGE;
+      return requests.slice(start, start + WELFARE_TABLE_PER_PAGE);
+    }, [requests, currentPage]);
+
+    return (
     <div className="flex flex-col gap-4 w-full">
-      <h2 className="text-lg font-bold text-pink-400">{title}</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-pink-400">{title}</h2>
+        <span className="text-xs text-zinc-500">แสดง {pagedRequests.length} / {requests.length} รายการ</span>
+      </div>
       <div className="overflow-x-auto w-full border border-white/10 rounded-xl bg-zinc-950/40">
         <table className="w-full min-w-full text-sm text-left text-zinc-200">
           <thead className="text-xs bg-white/5 text-zinc-400 border-b border-white/10 uppercase">
@@ -663,14 +677,14 @@ export default function GangDashboard() {
             </tr>
           </thead>
           <tbody>
-            {requests.length === 0 ? (
+            {pagedRequests.length === 0 ? (
               <tr>
                 <td colSpan={7} className="text-center py-8 text-zinc-500">
                   {emptyText}
                 </td>
               </tr>
             ) : (
-              requests.map((req) => {
+              pagedRequests.map((req) => {
                 const details = parseDetails(req.details);
                 let extra = "-";
                 if (req.requestType === "receive") {
@@ -732,15 +746,42 @@ export default function GangDashboard() {
           </tbody>
         </table>
       </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-zinc-500">หน้า {currentPage} / {totalPages}</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              ← ก่อนหน้า
+            </button>
+            <button
+              type="button"
+              disabled={currentPage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-zinc-300 text-xs hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              ถัดไป →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-  );
+    );
+  };
 
   const WelfareHoldersList = ({ requests }: { requests: any[] }) => {
     const byItem = useMemo(() => {
       const activeOrLeft = requests.filter(
         (r) =>
-          (r.requestType === "receive" || r.requestType === "trade") &&
-          (r.status === "รับไปแล้ว" || r.status === "ออกแล้ว")
+          (r.requestType === "receive" &&
+            (r.status === "รับไปแล้ว" || r.status === "ออกแล้ว")) ||
+          r.requestType === "trade" ||
+          (r.requestType === "leave" &&
+            (r.status === "รับไปแล้ว" || r.status === "ออกแล้ว" || r.status === "เอาสวัสดิการออกแล้ว"))
       );
       return activeOrLeft.reduce<Record<string, any[]>>((acc, r) => {
         const item = r.welfareItem || "อื่นๆ";
@@ -762,14 +803,54 @@ export default function GangDashboard() {
               <ul className="flex flex-col gap-1">
                 {reqs.map((req) => (
                   <li key={req.id} className="flex items-center justify-between text-xs">
-                    <span className="text-zinc-300">{getWelfareReceiverName(req)}</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                      req.status === "รับไปแล้ว"
-                        ? "bg-green-500/20 text-green-300 border border-green-500/30"
-                        : "bg-zinc-600/30 text-zinc-300 border border-zinc-500/30"
-                    }`}>
-                      {req.status === "รับไปแล้ว" ? "อยู่ในแก๊ง" : "🚪 ออกแล้ว"}
+                    <span className="text-zinc-300">
+                      {getWelfareReceiverName(req)}
+                      {(() => {
+                        const d = parseDetails(req.details);
+                        if (req.requestType === "trade" && d.tradeHolderWelfare) {
+                          return (
+                            <span className="text-zinc-500 ml-1">
+                              ({translateWelfareItem(d.tradeHolderWelfare)} จาก {d.tradeHolderName || "-"})
+                            </span>
+                          );
+                        }
+                        if (req.requestType === "leave") {
+                          let held = d.leaveWelfare;
+                          if (!held) {
+                            const match = requests.find(
+                              (r) =>
+                                r.id !== req.id &&
+                                (r.status === "รับไปแล้ว" || r.status === "ออกแล้ว") &&
+                                (r.requestType === "receive" || r.requestType === "trade") &&
+                                getWelfareReceiverName(r) === d.leaveName
+                            );
+                            if (match) {
+                              const md = parseDetails(match.details);
+                              held = match.requestType === "trade" ? md.tradeHolderWelfare : match.welfareItem;
+                            }
+                          }
+                          if (held) {
+                            return <span className="text-zinc-500 ml-1">({translateWelfareItem(held)})</span>;
+                          }
+                        }
+                        return null;
+                      })()}
                     </span>
+                    {(() => {
+                      if (req.requestType === "leave" || req.status === "ออกแล้ว" || req.status === "เอาสวัสดิการออกแล้ว") {
+                        return (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-600/30 text-zinc-300 border border-zinc-500/30">🚪 ออกแล้ว</span>
+                        );
+                      }
+                      if (req.status !== "รับไปแล้ว") {
+                        return (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">⏳ รอรับ</span>
+                        );
+                      }
+                      return (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-green-500/20 text-green-300 border border-green-500/30">อยู่ในแก๊ง</span>
+                      );
+                    })()}
                   </li>
                 ))}
               </ul>
