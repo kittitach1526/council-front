@@ -429,13 +429,19 @@ export default function CouncilAdminDashboard() {
         (g.abbreviation || "").toLowerCase().includes(q)
     );
   }, [disbandedGangs, gangSearch]);
-  const welfareByGangList = useMemo(
-    () =>
-      selectedGangAbbr
-        ? welfareRequests.filter((r) => r.requestType !== "leave" && r.gangAbbreviation === selectedGangAbbr)
-        : [],
-    [welfareRequests, selectedGangAbbr]
-  );
+  const welfareByGangList = useMemo(() => {
+    if (selectedGangAbbr) {
+      return welfareRequests.filter((r) => r.requestType !== "leave" && r.gangAbbreviation === selectedGangAbbr);
+    }
+    const q = gangSearch.trim().toLowerCase();
+    if (!q) return [];
+    return welfareRequests.filter(
+      (r) =>
+        r.requestType !== "leave" &&
+        ((r.gangName || "").toLowerCase().includes(q) ||
+          (r.gangAbbreviation || "").toLowerCase().includes(q))
+    );
+  }, [welfareRequests, selectedGangAbbr, gangSearch]);
 
   const pendingGangPagination = usePagination(pendingGangs, 10, [gangSearch]);
   const filteredEditRequests = useMemo(() => {
@@ -486,7 +492,7 @@ export default function CouncilAdminDashboard() {
   const leaveRequestPagination = usePagination(filteredLeaveRequests, 10, [gangSearch]);
   const uniformPagination = usePagination(filteredUniformFiles, 10, [uniformGangFilter, gangSearch]);
   const disbandedGangPagination = usePagination(filteredDisbandedGangs, 10, [gangSearch]);
-  const welfareByGangPagination = usePagination(welfareByGangList, 10, [selectedGangAbbr]);
+  const welfareByGangPagination = usePagination(welfareByGangList, 10, [selectedGangAbbr, gangSearch]);
   const currentWelfareItemOptions = useMemo(() => {
     const names = Array.from(new Set(currentWelfare.map((r) => r.welfareItem).filter(Boolean)));
     return ["all", ...names.sort()];
@@ -2018,6 +2024,7 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                     <table className="w-full text-xs text-left whitespace-nowrap">
                       <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/[0.06]">
                         <tr>
+                          <th className="px-6 py-4">ID</th>
                           <th className="px-6 py-4">ผู้ยื่นเรื่อง</th>
                           <th className="px-6 py-4">ประเภท</th>
                           <th className="px-6 py-4">รายการของรางวัล</th>
@@ -2029,13 +2036,14 @@ if (!adminData) return <div className="text-zinc-500 text-center mt-20 font-ligh
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.04] text-zinc-300">
-                        {!selectedGangAbbr ? (
-                          <tr><td colSpan={8} className="text-center py-20 text-zinc-600 font-light tracking-wide">👆 กรุณาเลือกแก๊งจากเมนูด้านบน</td></tr>
+                        {!selectedGangAbbr && !gangSearch ? (
+                          <tr><td colSpan={9} className="text-center py-20 text-zinc-600 font-light tracking-wide">👆 กรุณาเลือกแก๊งจากเมนูด้านบน</td></tr>
                         ) : welfareByGangList.length === 0 ? (
-                          <tr><td colSpan={8} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีประวัติการขอสวัสดิการของแก๊งนี้</td></tr>
+                          <tr><td colSpan={9} className="text-center py-20 text-zinc-600 font-light tracking-wide">📭 ไม่มีประวัติการขอสวัสดิการของแก๊งนี้</td></tr>
                         ) : (
                           welfareByGangPagination.pagedItems.map((req) => (
                             <tr key={req.id} className="hover:bg-white/[0.01] transition-colors">
+                              <td className="px-6 py-4 text-zinc-400 font-mono">#{req.id}</td>
                               <td className="px-6 py-4 font-medium text-white">
                                 {req.requestName}
                                 <span className="block text-zinc-500 font-mono">{req.discordId}</span>
