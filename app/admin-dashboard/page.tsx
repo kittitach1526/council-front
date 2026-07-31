@@ -62,7 +62,7 @@ export default function AdminDashboard() {
   const currentActor = adminData?.name || adminData?.username || "แอดมิน";
   const currentActorRole = "admin";
   const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<"welfare" | "outfit" | "leave">("welfare");
+  const [activeTab, setActiveTab] = useState<"outfit" | "welfare">("outfit");
   const [loading, setLoading] = useState(false);
   const [welfareRequests, setWelfareRequests] = useState<WelfareRequest[]>([]);
   const [uniformFiles, setUniformFiles] = useState<UniformFile[]>([]);
@@ -76,12 +76,42 @@ export default function AdminDashboard() {
   const UNIFORM_PER_PAGE = 10;
 
   const filteredWelfareRequests = useMemo(() => {
-    if (selectedGang === "ทั้งหมด") return welfareRequests;
-    return welfareRequests.filter((r) => r.gangAbbreviation === selectedGang);
+    const active = welfareRequests.filter((r) => r.status === "รับไปแล้ว" || r.status === "รอเอาออก");
+    if (selectedGang === "ทั้งหมด") return active;
+    return active.filter((r) => r.gangAbbreviation === selectedGang);
   }, [welfareRequests, selectedGang]);
+
+  const groupedWelfareRequests = useMemo(() => {
+    const getHolderKey = (req: WelfareRequest) => {
+      const details = parseDetails(req.details);
+      const isTrade = req.requestType === "trade";
+      const name = isTrade
+        ? details.tradeHolderName || req.requestName || "-"
+        : details.receiverName || req.requestName || "-";
+      const discord = isTrade
+        ? details.tradeHolderDiscord || req.discordId || "-"
+        : details.receiverDiscord || req.discordId || "-";
+      return `${name}|${discord}`;
+    };
+    const map = new Map<string, WelfareRequest[]>();
+    for (const req of filteredWelfareRequests) {
+      const key = getHolderKey(req);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(req);
+    }
+    return Array.from(map.values());
+  }, [filteredWelfareRequests]);
 
   const gangOptions = useMemo(() => {
     return ["ทั้งหมด", ...Array.from(new Set(welfareRequests.map((r) => r.gangAbbreviation).filter(Boolean)))];
+  }, [welfareRequests]);
+
+  const gangByAbbr = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of welfareRequests) {
+      if (r.gangAbbreviation && r.gangName) map.set(r.gangAbbreviation, r.gangName);
+    }
+    return map;
   }, [welfareRequests]);
 
   const sortedUniformFiles = useMemo(() => {
@@ -182,10 +212,6 @@ export default function AdminDashboard() {
           setGangs(gangsResult.success ? gangsResult.gangs || [] : []);
         }
 
-        if (activeTab === "leave") {
-          const leaveResult = await getLeaveRequests();
-          setLeaveRequests(leaveResult.success ? leaveResult.requests || [] : []);
-        }
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -225,6 +251,24 @@ export default function AdminDashboard() {
       } else {
         showStatus({ type: "error", message: result.message });
       }
+    } catch (error) {
+      console.error(error);
+      showStatus({ type: "error", message: "❌ ไม่สามารถอัปเดตสถานะสวัสดิการได้" });
+    }
+  };
+
+  const handleRemoveGroup = async (ids: number[]) => {
+    try {
+      for (const id of ids) {
+        const result = await updateWelfareStatus(id, "เอาสวัสดิการออกแล้ว", currentActor, currentActorRole);
+        if (!result.success) {
+          showStatus({ type: "error", message: result.message });
+          return;
+        }
+      }
+      showStatus({ type: "success", message: "เอาสวัสดิการออกจากรายชื่อนี้แล้ว" });
+      const welfareResult = await getAllWelfareRequests();
+      setWelfareRequests(welfareResult.success ? welfareResult.requests || [] : []);
     } catch (error) {
       console.error(error);
       showStatus({ type: "error", message: "❌ ไม่สามารถอัปเดตสถานะสวัสดิการได้" });
@@ -316,26 +360,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Tab Selection - สไตล์หน้า select */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
-          <button
-            onClick={() => setActiveTab("welfare")}
-            className={`group flex flex-col items-center sm:items-start gap-3 p-6 rounded-2xl border text-white transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg text-center sm:text-left ${
-              activeTab === "welfare"
-                ? "bg-gradient-to-br from-blue-600/30 to-indigo-600/30 border-blue-400/50"
-                : "bg-white/5 border-white/10 hover:bg-white/10"
-            }`}
-          >
-            <div className={`p-3 rounded-xl transition-transform group-hover:scale-110 ${activeTab === "welfare" ? "bg-blue-500/20 text-blue-300" : "bg-white/10 text-zinc-300"}`}>
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-lg font-bold">สวัสดิการ</h3>
-              <p className="text-xs text-zinc-300/80 mt-1 font-light">จัดการคำขอรับสวัสดิการจากแก๊งต่างๆ</p>
-            </div>
-          </button>
-
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
           <button
             onClick={() => setActiveTab("outfit")}
             className={`group flex flex-col items-center sm:items-start gap-3 p-6 rounded-2xl border text-white transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg text-center sm:text-left ${
@@ -350,27 +375,27 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-bold">ชุด / ไฟล์</h3>
+              <h3 className="text-lg font-bold">ไฟล์ชุด</h3>
               <p className="text-xs text-zinc-300/80 mt-1 font-light">ตรวจสอบและอัปเดตสถานะไฟล์ชุดที่ส่งเข้ามา</p>
             </div>
           </button>
 
           <button
-            onClick={() => setActiveTab("leave")}
+            onClick={() => setActiveTab("welfare")}
             className={`group flex flex-col items-center sm:items-start gap-3 p-6 rounded-2xl border text-white transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg text-center sm:text-left ${
-              activeTab === "leave"
-                ? "bg-gradient-to-br from-red-600/30 to-rose-600/30 border-red-400/50"
+              activeTab === "welfare"
+                ? "bg-gradient-to-br from-amber-600/30 to-red-600/30 border-amber-400/50"
                 : "bg-white/5 border-white/10 hover:bg-white/10"
             }`}
           >
-            <div className={`p-3 rounded-xl transition-transform group-hover:scale-110 ${activeTab === "leave" ? "bg-red-500/20 text-red-300" : "bg-white/10 text-zinc-300"}`}>
+            <div className={`p-3 rounded-xl transition-transform group-hover:scale-110 ${activeTab === "welfare" ? "bg-amber-500/20 text-amber-300" : "bg-white/10 text-zinc-300"}`}>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-bold">ออกลอย</h3>
-              <p className="text-xs text-zinc-300/80 mt-1 font-light">จัดการคำขอออก-ออกลอยและสวัสดิการค้าง</p>
+              <h3 className="text-lg font-bold">เอาสวัสดิการออก</h3>
+              <p className="text-xs text-zinc-300/80 mt-1 font-light">เอาสวัสดิการออกจากผู้ถือ</p>
             </div>
           </button>
         </div>
@@ -394,7 +419,7 @@ export default function AdminDashboard() {
                     className="h-10 px-3 rounded-xl bg-zinc-950 border border-white/10 text-zinc-200 text-sm focus:outline-none focus:border-blue-400"
                   >
                     {gangOptions.map((g) => (
-                      <option key={g} value={g}>{g}</option>
+                      <option key={g} value={g}>{g === "ทั้งหมด" ? g : gangByAbbr.get(g) || g}</option>
                     ))}
                   </select>
                 </label>
@@ -404,73 +429,82 @@ export default function AdminDashboard() {
                 <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/10 font-medium">
                   <tr>
                     <th className="px-6 py-4">แก๊ง</th>
-                    <th className="px-6 py-4">ผู้ยื่นเรื่อง (Discord)</th>
-                    <th className="px-6 py-4">รายการ</th>
-                    <th className="px-6 py-4">สถานะ</th>
+                    <th className="px-6 py-4">เลข ID</th>
+                    <th className="px-6 py-4">ชื่อผู้ถือสวัสดิการ</th>
+                    <th className="px-6 py-4">Discord ผู้ถือ</th>
+                    <th className="px-6 py-4">สวัสดิการที่ถืออยู่</th>
                     <th className="px-6 py-4 text-center">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10 text-zinc-300">
                   {filteredWelfareRequests.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="text-center py-20 text-zinc-500 font-light tracking-wide">
-                        📭 ไม่มีคำขอสวัสดิการในระบบ
+                      <td colSpan={6} className="text-center py-20 text-zinc-500 font-light tracking-wide">
+                        📭 ไม่มีสวัสดิการที่ต้องเอาออก
                       </td>
                     </tr>
                   ) : (
-                    filteredWelfareRequests.map((req) => (
-                      <tr key={req.id} className="hover:bg-white/5 transition-colors">
-                        <td className="px-6 py-4 font-semibold text-white">
-                          {req.gangName}{" "}
-                          <span className="text-zinc-500 font-normal">[{req.gangAbbreviation}]</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="block text-zinc-300 font-medium">{req.requestName}</span>
-                          <span className="text-[10px] text-zinc-500 font-mono">{req.discordId}</span>
-                        </td>
-                        <td className="px-6 py-4 text-zinc-400">{translateWelfareItem(req.welfareItem)}</td>
-                        <td className="px-6 py-4">
-                          <span className="text-[10px] px-2.5 py-1 rounded-md bg-white/5 text-zinc-300 border border-white/10 font-mono">
-                            {req.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          {req.status === "รอรับ" ? (
-                            <div className="flex justify-center gap-2">
-                              <button
-                                onClick={() => handleWelfareAction(req.id, "รับไปแล้ว")}
-                                className="px-4 py-1.5 bg-white/10 hover:bg-white hover:text-black font-medium rounded-lg border border-white/10 transition-all text-[11px] shadow-sm"
-                              >
-                                อนุมัติ
-                              </button>
-                              <button
-                                onClick={() => handleWelfareAction(req.id, "เอาออกแล้ว")}
-                                className="px-4 py-1.5 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-white/10 rounded-lg transition-all text-[11px]"
-                              >
-                                ยกเลิก
-                              </button>
+                    groupedWelfareRequests.map((group) => {
+                      const firstReq = group[0];
+                      const details = parseDetails(firstReq.details);
+                      const isTrade = firstReq.requestType === "trade";
+                      const holderName = isTrade
+                        ? details.tradeHolderName || firstReq.requestName || "-"
+                        : details.receiverName || firstReq.requestName || "-";
+                      const holderDiscord = isTrade
+                        ? details.tradeHolderDiscord || firstReq.discordId || "-"
+                        : details.receiverDiscord || firstReq.discordId || "-";
+
+                      const uniqueByItem = new Map<string, WelfareRequest>();
+                      for (const req of group) {
+                        const d = parseDetails(req.details);
+                        const held = req.requestType === "trade" ? d.tradeHolderWelfare || req.welfareItem : req.welfareItem;
+                        if (!uniqueByItem.has(held)) uniqueByItem.set(held, req);
+                      }
+                      const uniqueReqs = Array.from(uniqueByItem.values());
+
+                      return (
+                        <tr key={firstReq.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4 font-semibold text-white">
+                            {firstReq.gangName}{" "}
+                            <span className="text-zinc-500 font-normal">[{firstReq.gangAbbreviation}]</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col gap-1 font-mono text-zinc-400">
+                              {uniqueReqs.map((req) => (
+                                <div key={req.id}>#{req.id}</div>
+                              ))}
                             </div>
-                          ) : req.status === "รับไปแล้ว" ? (
+                          </td>
+                          <td className="px-6 py-4 text-zinc-300 font-medium">
+                            {holderName}
+                            {isTrade && details.tradeToName ? (
+                              <span className="block text-[10px] text-amber-400 mt-0.5">เทรดให้: {details.tradeToName}</span>
+                            ) : null}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-zinc-500 font-mono">{holderDiscord}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col gap-1 text-zinc-400">
+                              {uniqueReqs.map((req) => {
+                                const d = parseDetails(req.details);
+                                const held = req.requestType === "trade" ? d.tradeHolderWelfare || req.welfareItem : req.welfareItem;
+                                return <div key={req.id}>{translateWelfareItem(held)}</div>;
+                              })}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
                             <div className="flex justify-center gap-2">
                               <button
-                                onClick={() => handleWelfareAction(req.id, "เอาสวัสดิการออกแล้ว")}
+                                onClick={() => handleRemoveGroup(uniqueReqs.map((req) => req.id))}
                                 className="px-4 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg transition-all text-[11px]"
                               >
                                 เอาสวัสดิการออกแล้ว
                               </button>
                             </div>
-                          ) : (
-                            <span className={`text-[10px] font-medium px-2.5 py-1 rounded-md border ${
-                              req.status === "ออกแล้ว"
-                                ? "bg-zinc-600/30 text-zinc-300 border-zinc-500/30"
-                                : "bg-white/5 text-zinc-300 border-white/10"
-                            }`}>
-                              {req.status === "เอาสวัสดิการออกแล้ว" ? "✕ เอาสวัสดิการออกแล้ว" : req.status === "ออกแล้ว" ? "🚪 ออกแล้ว" : "✕ ยกเลิกคำขอ"}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -715,91 +749,6 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {!loading && activeTab === "leave" && (
-            <div className="overflow-x-auto">
-              <div className="flex flex-col sm:flex-row gap-4 p-4 border-b border-white/10 bg-white/5">
-                <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
-                  <span>กรองตามแก๊ง</span>
-                  <select
-                    value={selectedLeaveGang}
-                    onChange={(e) => setSelectedLeaveGang(e.target.value)}
-                    className="h-10 px-3 rounded-xl bg-zinc-950 border border-white/10 text-zinc-200 text-sm focus:outline-none focus:border-red-400"
-                  >
-                    {leaveGangOptions.map((g) => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
-                </label>
-                <span className="text-xs text-zinc-500 flex items-center">แสดง {filteredLeaveRequests.length} รายการ</span>
-              </div>
-              <table className="w-full text-xs text-left whitespace-nowrap">
-                <thead className="bg-zinc-950/40 text-zinc-400 border-b border-white/10 font-medium">
-                  <tr>
-                    <th className="px-6 py-4">แก๊ง</th>
-                    <th className="px-6 py-4">ผู้ยื่นเรื่อง (Discord)</th>
-                    <th className="px-6 py-4">คนออก</th>
-                    <th className="px-6 py-4">สวัสดิการค้าง</th>
-                    <th className="px-6 py-4">สถานะ</th>
-                    <th className="px-6 py-4 text-center">จัดการ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/10 text-zinc-300">
-                  {filteredLeaveRequests.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="text-center py-20 text-zinc-500 font-light tracking-wide">
-                        📭 ไม่มีคำขอออกลอย
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredLeaveRequests.map((req) => (
-                      <tr key={req.id} className="hover:bg-white/5 transition-colors">
-                        <td className="px-6 py-4 font-semibold text-white">
-                          {req.gangName}{" "}
-                          <span className="text-zinc-500 font-normal">[{req.gangAbbreviation}]</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="block text-zinc-300 font-medium">{req.requestName}</span>
-                          <span className="text-[10px] text-zinc-500 font-mono">{req.discordId}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="block text-zinc-300 font-medium">{req.details?.leaveName || "-"}</span>
-                          <span className="text-[10px] text-zinc-500 font-mono">{req.details?.leaveDiscord || "-"}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          {req.hasWelfare ? (
-                            <span className="text-rose-400 font-medium">
-                              {req.activeWelfareItems?.map((i: any) => i.welfareItem).join(", ")}
-                            </span>
-                          ) : (
-                            <span className="text-zinc-500">-</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-[10px] px-2.5 py-1 rounded-md bg-white/5 text-zinc-300 border border-white/10 font-mono">
-                            {req.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          {req.status === "รอรับ" ? (
-                            <button
-                              onClick={() => handleLeaveAction(req.id, "เอาสวัสดิการออกแล้ว")}
-                              className="px-4 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg transition-all text-[11px]"
-                            >
-                              เอาสวัสดิการออกแล้ว
-                            </button>
-                          ) : (
-                            <span className="text-zinc-500 text-xs">
-                              {req.status === "เอาสวัสดิการออกแล้ว" ? "✓ เอาสวัสดิการออกแล้ว" : "-"}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       </main>
     </div>
