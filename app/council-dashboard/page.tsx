@@ -113,7 +113,7 @@ export default function CouncilAdminDashboard() {
     const q = welfareQuotaSearch.trim().toLowerCase();
     const counts: Record<string, number> = {};
     for (const r of welfareRequests) {
-      if (r.requestType === "trade") {
+      if (r.requestType === "trade" && r.status === "รับไปแล้ว") {
         const key = r.gangAbbreviation || r.gangName || "";
         if (key) counts[key] = (counts[key] || 0) + 1;
       }
